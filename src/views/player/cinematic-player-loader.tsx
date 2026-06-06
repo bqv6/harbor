@@ -5,19 +5,25 @@ import { getPlaybackPosition, usePlaybackFlag } from "@/lib/player/playback-cloc
 import { isLocalUrl } from "@/lib/player/local-url";
 import type { PlayerSrc } from "@/lib/view";
 import { LoaderLogoOrText } from "./loader-logo-or-text";
+import { readinessScore, type EngineStats } from "@/lib/torrent/engine-stats";
+import { isBundledEngineUrl } from "@/lib/stremio-server";
 
 export function CinematicPlayerLoader({
   src,
   snap,
   forceShow,
   onCancel,
+  engineStats,
 }: {
   src: PlayerSrc;
   snap: PlayerSnapshot;
   forceShow?: boolean;
   onCancel: () => void;
+  engineStats?: EngineStats | null;
 }) {
   const isLocal = isLocalUrl(src.url);
+  const isInfoHash = isBundledEngineUrl(src.url) && !src.url.includes("/hlsv2/");
+  const pct = Math.round(readinessScore(engineStats ?? null, isInfoHash));
   const everPlayedRef = useRef(false);
   const hasProgress = usePlaybackFlag(() => getPlaybackPosition() > 0.3);
   if (snap.durationSec > 0 && hasProgress) {
@@ -75,7 +81,22 @@ export function CinematicPlayerLoader({
             {src.episode.name ? ` · ${src.episode.name}` : ""}
           </p>
         )}
-        <HarborLoader size="md" caption={isLocal ? "Loading" : "Connecting"} />
+        {isInfoHash ? (
+          <div className="flex w-full max-w-[360px] flex-col items-center gap-3">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/12">
+              <div
+                className="h-full rounded-full bg-white/85 transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-[12.5px] font-medium tracking-wide text-white/55">
+              {snap.buffering ? "Buffering" : "Preparing stream"}
+              {engineStats ? ` (${pct}%)` : ""}
+            </p>
+          </div>
+        ) : (
+          <HarborLoader size="md" caption={isLocal ? "Loading" : "Connecting"} />
+        )}
       </div>
       <button
         onClick={onCancel}

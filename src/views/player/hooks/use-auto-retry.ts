@@ -5,7 +5,7 @@ import { isLocalUrl } from "@/lib/player/local-url";
 import { clearOnePickerCache } from "@/lib/picker-cache";
 import { resolveViaDebrids } from "@/lib/streams/resolve";
 import { registerStreamProxy } from "@/lib/stream-proxy";
-import { buildTranscodedUrl, isBundledEngineUrl, probeStremioServer } from "@/lib/stremio-server";
+import { buildTranscodedUrl, probeStremioServer } from "@/lib/stremio-server";
 import type { DebridStore } from "@/lib/debrid/types";
 import type { Meta } from "@/lib/cinemeta";
 import type { PlayerSrc, PlayEpisode } from "@/lib/view";
@@ -27,11 +27,22 @@ export function useAutoRetry(params: {
   debrids: DebridStore[];
   selfFrameReadyRef: RefObject<boolean>;
   openPicker: OpenPicker;
+  engineFailure: boolean;
+  isP2pEngine: boolean;
 }) {
-  const { bridgeRef, src, snap, stremioServerTranscode, instantPlay, inRoom, debrids, selfFrameReadyRef, openPicker } = params;
+  const { bridgeRef, src, snap, stremioServerTranscode, instantPlay, inRoom, debrids, selfFrameReadyRef, openPicker, engineFailure, isP2pEngine } = params;
   const isLocal = isLocalUrl(src.url);
-  const isBundledEngine = isBundledEngineUrl(src.url);
   const isLive = src.meta.id.startsWith("iptv:");
+  const ENGINE_FIRST_FRAME_GRACE_MS = 20_000;
+  const ENGINE_HARD_CEILING_MS = 75_000;
+  const urlAtRef = useRef(0);
+  const urlSeenRef = useRef<string | null>(null);
+  if (urlSeenRef.current !== src.url) {
+    urlSeenRef.current = src.url;
+    urlAtRef.current = Date.now();
+  }
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
 
   const hasProgress = usePlaybackFlag(
     () => getPlaybackPosition() > 0.5 || getPlaybackBuffered() > 0.5,
@@ -125,6 +136,7 @@ export function useAutoRetry(params: {
       return;
     }
     if (getPlaybackPosition() > 5) return;
+    if (isP2pEngine && !engineFailure && Date.now() - urlAtRef.current < ENGINE_FIRST_FRAME_GRACE_MS) return;
     const failoverHash = src.streamRef?.infoHash;
     if (failoverHash && debrids.length > 0 && !debridFailoverTriedRef.current) {
       debridFailoverTriedRef.current = true;
@@ -166,6 +178,7 @@ export function useAutoRetry(params: {
     }
     if (
       stremioServerTranscode &&
+      (!isP2pEngine || engineFailure) &&
       !transcodedTriedRef.current &&
       snap.errorCode === "decode" &&
       transcodedUrl == null
@@ -196,6 +209,8 @@ export function useAutoRetry(params: {
     src.subtitles,
     src.notWebReady,
     bridgeRef,
+    isP2pEngine,
+    engineFailure,
   ]);
 
   const lastPosRef = useRef({ pos: 0, at: 0, started: false, urlAt: 0 });
@@ -228,12 +243,12 @@ export function useAutoRetry(params: {
       const neverStarted = ref.pos < 0.5;
       const graceMs = neverStarted ? 75_000 : 18_000;
       if (now - ref.urlAt < graceMs) return;
-      if (!isBundledEngine && now - ref.at > graceMs && pos < 5) {
+      if ((!isP2pEngine || engineFailure) && now - ref.at > graceMs && pos < 5) {
         triggerAutoRetry(neverStarted ? "source did not start after 75s" : "position frozen for 18s");
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, [snap.status, triggerAutoRetry, src.url, isBundledEngine]);
+  }, [snap.status, triggerAutoRetry, src.url, isP2pEngine, engineFailure]);
 
   const noVideoSinceRef = useRef<number | null>(null);
   const videoSeenRef = useRef(false);
@@ -257,14 +272,17 @@ export function useAutoRetry(params: {
       noVideoSinceRef.current = Date.now();
       return;
     }
-    if (Date.now() - noVideoSinceRef.current > BLACK_SCREEN_GRACE_MS) {
-      triggerAutoRetry("audio plays but no video frames (black screen)");
+    const graceMs = isP2pEngine ? Math.max(BLACK_SCREEN_GRACE_MS, ENGINE_FIRST_FRAME_GRACE_MS) : BLACK_SCREEN_GRACE_MS;
+    if (Date.now() - noVideoSinceRef.current > graceMs) {
+      if (!isP2pEngine || engineFailure) {
+        triggerAutoRetry("audio plays but no video frames (black screen)");
+      }
     }
-  }, [snap.status, snap.videoWidth, snap.videoHeight, triggerAutoRetry, src.url]);
+  }, [snap.status, snap.videoWidth, snap.videoHeight, triggerAutoRetry, src.url, isP2pEngine, engineFailure]);
 
   useEffect(() => {
     if (snap.status === "ended") return;
-    if (isBundledEngine) return;
+    if (isP2pEngine && !engineFailure) return;
     if (snap.durationSec > 0 || getPlaybackPosition() > 1) return;
     const t = window.setTimeout(() => {
       if (snap.durationSec === 0 && getPlaybackPosition() === 0) {
@@ -272,7 +290,7 @@ export function useAutoRetry(params: {
       }
     }, STUCK_AUTORETRY_MS);
     return () => window.clearTimeout(t);
-  }, [src.url, snap.durationSec, snap.status, triggerAutoRetry, isBundledEngine]);
+  }, [src.url, snap.durationSec, snap.status, triggerAutoRetry, isP2pEngine, engineFailure]);
 
   useEffect(() => {
     if (!inRoom || isLocal || isLive) return;
@@ -281,11 +299,35 @@ export function useAutoRetry(params: {
     if (snap.videoWidth > 0 && snap.videoHeight > 0) return;
     const t = window.setTimeout(() => {
       if (!selfFrameReadyRef.current && (snap.videoWidth <= 0 || snap.videoHeight <= 0)) {
-        triggerAutoRetry("room stream produced no video");
+        if (!isP2pEngine || engineFailure) {
+          triggerAutoRetry("room stream produced no video");
+        }
       }
     }, ROOM_STALL_MS);
     return () => window.clearTimeout(t);
-  }, [inRoom, isLocal, isLive, snap.status, snap.videoWidth, snap.videoHeight, triggerAutoRetry, src.url, selfFrameReadyRef]);
+  }, [inRoom, isLocal, isLive, snap.status, snap.videoWidth, snap.videoHeight, triggerAutoRetry, src.url, selfFrameReadyRef, isP2pEngine, engineFailure]);
+
+  useEffect(() => {
+    if (!isP2pEngine || snap.status === "ended") return;
+    const id = window.setInterval(() => {
+      if (getPlaybackPosition() > 5) return;
+      if ((src.attempt ?? 0) >= MAX_AUTORETRY_ATTEMPTS) return;
+      const age = Date.now() - urlAtRef.current;
+      if (engineFailure && !debridFailoverTriedRef.current && age >= ENGINE_FIRST_FRAME_GRACE_MS) {
+        triggerAutoRetry("engine reports no peers and no download progress");
+        return;
+      }
+      if (
+        snapRef.current.status !== "paused" &&
+        snapRef.current.videoWidth <= 0 &&
+        getPlaybackPosition() < 0.5 &&
+        age > ENGINE_HARD_CEILING_MS
+      ) {
+        triggerAutoRetry("engine produced no video within ceiling");
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isP2pEngine, snap.status, engineFailure, triggerAutoRetry]);
 
   return { slowLoad, transcodedUrl };
 }

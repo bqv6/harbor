@@ -304,7 +304,7 @@ export function StreamSwitcher({
                   aria-pressed={showFiltered}
                 >
                   <Filter size={11} strokeWidth={2.2} />
-                  {showFiltered ? "Filtered shown" : `Show all · +${rejectedStreams.length}`}
+                  {showFiltered ? "Flagged shown" : `Show flagged (${rejectedStreams.length})`}
                 </button>
               </Tooltip>
             )}
@@ -319,7 +319,7 @@ export function StreamSwitcher({
                 aria-pressed={cachedOnly}
               >
                 <Zap size={11} fill={cachedOnly ? "currentColor" : "none"} strokeWidth={2.2} />
-                {cachedOnly ? `Cached only · +${uncachedHidden}` : "Show all"}
+                {cachedOnly ? `Cached only (${uncachedHidden})` : "Cached only"}
               </button>
             )}
             {addonOptions.length > 1 && (

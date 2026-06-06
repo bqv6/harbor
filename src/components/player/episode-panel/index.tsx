@@ -86,7 +86,10 @@ export function EpisodePanel({
           return;
         }
       }
-      const preflight = await preflightCheck(playUrl);
+      const skipPreflight = r.via === "stremio-server" || r.via === "direct";
+      const preflight = skipPreflight
+        ? ({ ok: true } as const)
+        : await preflightCheck(playUrl).catch(() => ({ ok: true } as const));
       if (!preflight.ok && preflight.reason === "stub") {
         setResolvingFor(null);
         return;
@@ -101,7 +104,7 @@ export function EpisodePanel({
         subtitles: [],
         streamRef: {
           infoHash: stream.infoHash ?? null,
-          fileIdx: stream.fileIdx ?? null,
+          fileIdx: r.data.fileIdx ?? stream.fileIdx ?? null,
           addonId: stream.addonId ?? null,
           title: stream.title ?? null,
           parsedTitle: stream.parsedTitle ?? null,

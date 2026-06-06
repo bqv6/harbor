@@ -1,7 +1,7 @@
 import { safeFetch as fetch } from "@/lib/safe-fetch";
 
 const MIN_REAL_SIZE_BYTES = 5 * 1024 * 1024;
-const PREFLIGHT_TIMEOUT_MS = 4500;
+const PREFLIGHT_TIMEOUT_MS = 2500;
 
 export type PreflightOk = { ok: true; sizeBytes: number | null };
 export type PreflightFail = {

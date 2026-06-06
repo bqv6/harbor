@@ -26,6 +26,7 @@ export type PlayerSnapshot = {
   positionSec: number;
   durationSec: number;
   bufferedSec: number;
+  buffering: boolean;
   volume: number;
   muted: boolean;
   rate: number;
@@ -91,6 +92,7 @@ export const emptySnapshot: PlayerSnapshot = {
   positionSec: 0,
   durationSec: 0,
   bufferedSec: 0,
+  buffering: false,
   volume: 1,
   muted: false,
   rate: 1,

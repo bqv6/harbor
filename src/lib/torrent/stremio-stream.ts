@@ -61,7 +61,7 @@ export async function createAndListFiles(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         torrent: { infoHash: hash },
-        peerSearch: { sources: [`dht:${hash}`, ...trackers], min: 40, max: 150 },
+        peerSearch: { sources: [`dht:${hash}`, ...trackers], min: 40, max: 200 },
       }),
       signal: ctrl.signal,
     });
@@ -104,4 +104,12 @@ export function directStreamAvailable(stream: { infoHash?: string | null }): boo
   if (!stream.infoHash) return false;
   if (!("__TAURI_INTERNALS__" in window)) return false;
   return directTorrentEnabled();
+}
+
+const P2P_MIN_SEEDERS = 2;
+
+export function engineP2pEligible(stream: { infoHash?: string | null; seeders?: number | null }): boolean {
+  if (!directStreamAvailable(stream)) return false;
+  if (stream.seeders != null && stream.seeders < P2P_MIN_SEEDERS) return false;
+  return true;
 }

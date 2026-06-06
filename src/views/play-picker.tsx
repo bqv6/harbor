@@ -6,7 +6,7 @@ import type { Meta } from "@/lib/cinemeta";
 import { useDebridClients } from "@/lib/debrid/registry";
 import { useTogether } from "@/lib/together/provider";
 import { buildPlayInvite } from "@/lib/together/build-invite";
-import { consumeRecentStubEvent, isStreamDead } from "@/lib/dead-streams";
+import { consumeRecentStubEvent } from "@/lib/dead-streams";
 import { readPlayback } from "@/lib/playback-history";
 import { useSettings } from "@/lib/settings";
 import type { ScoredStream, Tier } from "@/lib/streams/types";
@@ -20,9 +20,6 @@ import { EmptyState, FilteredOutState, NoSourcesState, TheatresEmptyState } from
 import { CachedFilterPill, LanguageFilterPill } from "./play-picker/filter-pills";
 import { NoSourcesConfiguredModal } from "./play-picker/no-sources-modal";
 import {
-  hasInstantMarker,
-  isWatchHub,
-  needsDownload,
   normalizeLangCode,
   streamMatchesLangs,
 } from "./play-picker/picker-utils";
@@ -33,15 +30,14 @@ import { StremioLayout } from "./play-picker/stremio-layout";
 import { SourceDrawer } from "./play-picker/source-drawer";
 import { TierStrip } from "./play-picker/tier-strip";
 import { usePickHandler } from "./play-picker/use-pick-handler";
-import { useTopStreamVerify } from "./play-picker/use-top-stream-verify";
+import { useAutoCandidates } from "./play-picker/use-auto-candidates";
+import { useAutoFire } from "./play-picker/use-auto-fire";
 import { useAddons } from "./play-picker/use-addons";
 import { useImdbId } from "./play-picker/use-imdb-id";
 import { usePipelineResult } from "./play-picker/use-pipeline-result";
 import { useStreamIds } from "./play-picker/use-stream-ids";
 
 const TIER_ORDER: Tier[] = ["4K_DV", "4K_HDR", "4K", "1080p_HDR", "1080p", "720p", "SD", "ROUGH"];
-const AUTO_SETTLE_MS = 1500;
-const HIGH_CONFIDENCE_GRACE_MS = 350;
 
 export function PlayPicker({
   meta,
@@ -192,89 +188,15 @@ export function PlayPicker({
     [meta.id, episode?.season, episode?.episode],
   );
 
-  // Auto candidates = same set the Stremio-style manual layout would surface,
-  // top-down. We use the SAME sort the manual list uses (WatchHub last,
-  // download/uncached last, then addon rank, then instant marker), then keep
-  // only cached entries the picker can actually open without a download wait.
-  // If the user rolls back to manual mode, the order they see matches what
-  // instant mode just tried.
-  const autoCandidates = useMemo<ScoredStream[]>(() => {
-    if (!filteredPicker) return [];
-    const key = (s: ScoredStream) => s.url ?? s.infoHash ?? `${s.addonId}:${s.title ?? ""}`;
-    const addonRank = new Map<string, number>();
-    (addons ?? []).forEach((a, i) => {
-      if (a.manifest?.id) addonRank.set(a.manifest.id, i);
-    });
-    const previousMatch = previousPlayback
-      ? filteredPicker.all.find((s) => {
-          if (
-            previousPlayback.infoHash &&
-            s.infoHash &&
-            s.infoHash.toLowerCase() === previousPlayback.infoHash.toLowerCase()
-          ) {
-            if (previousPlayback.fileIdx == null || s.fileIdx == null) return true;
-            return s.fileIdx === previousPlayback.fileIdx;
-          }
-          return false;
-        }) ?? null
-      : null;
-    const sorted = filteredPicker.all.slice().sort((a, b) => {
-      const aw = isWatchHub(a) ? 1 : 0;
-      const bw = isWatchHub(b) ? 1 : 0;
-      if (aw !== bw) return aw - bw;
-      const ad = needsDownload(a) ? 1 : 0;
-      const bd = needsDownload(b) ? 1 : 0;
-      if (ad !== bd) return ad - bd;
-      if (hasStrongAddon) {
-        const at = isTorrentioStream(a) ? 1 : 0;
-        const bt = isTorrentioStream(b) ? 1 : 0;
-        if (at !== bt) return at - bt;
-      }
-      if (preferredLangs.length > 0) {
-        const al = streamMatchesLangs(a, preferredLangs) ? 0 : 1;
-        const bl = streamMatchesLangs(b, preferredLangs) ? 0 : 1;
-        if (al !== bl) return al - bl;
-      }
-      const ar = addonRank.get(a.addonId) ?? 9999;
-      const br = addonRank.get(b.addonId) ?? 9999;
-      if (ar !== br) return ar - br;
-      const ai = hasInstantMarker(a) ? 1 : 0;
-      const bi = hasInstantMarker(b) ? 1 : 0;
-      if (ai !== bi) return bi - ai;
-      return 0;
-    });
-    const out: ScoredStream[] = [];
-    const seen = new Set<string>();
-    const push = (s: ScoredStream | null | undefined) => {
-      if (!s) return;
-      if (isStreamDead(s)) return;
-      if (isWatchHub(s)) return;
-      if (!isCached(s) && !s.url) return;
-      const k = key(s);
-      if (seen.has(k)) return;
-      seen.add(k);
-      out.push(s);
-    };
-    push(previousMatch);
-    for (const s of sorted) push(s);
-    return out;
-  }, [filteredPicker, previousPlayback, isCached, addons, debrids, hasStrongAddon, isTorrentioStream]);
-
-  const { verifiedUrls, rejectedUrls, verifying } = useTopStreamVerify({
-    enabled: pipelineDone && autoCandidates.length > 0,
-    candidates: autoCandidates,
+  const autoCandidates = useAutoCandidates({
+    filteredPicker,
+    previousPlayback,
+    isCached,
+    addons,
+    hasStrongAddon,
+    isTorrentioStream,
+    preferredLangs,
   });
-  void verifiedUrls;
-  void rejectedUrls;
-
-  useEffect(() => {
-    if (!autoPlay || autoSettleReady || pipelineDone) return;
-    if (firstResultAt == null) return;
-    const elapsed = performance.now() - firstResultAt;
-    const remaining = Math.max(0, AUTO_SETTLE_MS - elapsed);
-    const t = window.setTimeout(() => setAutoSettleReady(true), remaining);
-    return () => window.clearTimeout(t);
-  }, [autoPlay, autoSettleReady, pipelineDone, firstResultAt]);
 
   const autoFiredRef = useRef(false);
   const [autoAttemptIdx, setAutoAttemptIdx] = useState(0);
@@ -286,61 +208,6 @@ export function PlayPicker({
     const t = window.setTimeout(() => setAutoCancelled(true), 45_000);
     return () => window.clearTimeout(t);
   }, [autoActive]);
-  const highConfidenceSinceRef = useRef<number | null>(null);
-  const [highConfidenceTick, setHighConfidenceTick] = useState(0);
-  useEffect(() => {
-    if (!autoActive || autoFiredRef.current || pipelineDone || autoSettleReady) return;
-    const top = autoCandidates[0];
-    const langOk = preferredLangs.length === 0 || (top != null && streamMatchesLangs(top, preferredLangs));
-    if (!top || !hasInstantMarker(top) || !isCached(top) || !langOk || (hasStrongAddon && isTorrentioStream(top))) {
-      highConfidenceSinceRef.current = null;
-      return;
-    }
-    const t = window.setTimeout(() => setHighConfidenceTick((n) => n + 1), HIGH_CONFIDENCE_GRACE_MS + 20);
-    return () => window.clearTimeout(t);
-  }, [autoActive, pipelineDone, autoSettleReady, autoCandidates, isCached, preferredLangs, hasStrongAddon, isTorrentioStream]);
-  void highConfidenceTick;
-  useEffect(() => {
-    if (!autoActive || autoFiredRef.current) return;
-    const top = autoCandidates[0];
-    const isFirstAttempt = (attempt ?? 0) === 0 && autoAttemptIdx === 0;
-    const langOk = preferredLangs.length === 0 || (top != null && streamMatchesLangs(top, preferredLangs));
-    const highConfidenceTop =
-      top != null && hasInstantMarker(top) && isCached(top) && langOk &&
-      (!hasStrongAddon || !isTorrentioStream(top));
-    if (isFirstAttempt && !pipelineDone) {
-      if (highConfidenceTop) {
-        const now = performance.now();
-        if (highConfidenceSinceRef.current == null) highConfidenceSinceRef.current = now;
-        if (now - highConfidenceSinceRef.current < HIGH_CONFIDENCE_GRACE_MS) return;
-      } else {
-        highConfidenceSinceRef.current = null;
-        if (!autoSettleReady) return;
-      }
-    }
-    if (autoCandidates.length === 0) return;
-    if (resolving) return;
-    const idx = Math.min((attempt ?? 0) + autoAttemptIdx, autoCandidates.length - 1);
-    const pick = autoCandidates[idx];
-    if (!pick) return;
-    const pickIsCached = isCached(pick);
-    const pickInstant = pickIsCached || !!pick.url;
-    if (!pickInstant) {
-      if (pipelineDone) setAutoCancelled(true);
-      return;
-    }
-    if (
-      pipelineDone &&
-      pick.url &&
-      verifying &&
-      !verifiedUrls.has(pick.url) &&
-      !rejectedUrls.has(pick.url)
-    ) {
-      return;
-    }
-    autoFiredRef.current = true;
-    onPlay(pick, false);
-  }, [autoActive, attempt, autoCandidates, resolving, autoAttemptIdx, autoSettleReady, pipelineDone, isCached, verifying, verifiedUrls, rejectedUrls, highConfidenceTick, hasStrongAddon, isTorrentioStream]);
 
   const previousMatch: ScoredStream | null = useMemo(() => {
     if (!filteredPicker || !previousPlayback) return null;
@@ -389,6 +256,25 @@ export function PlayPicker({
     setFailedStreams,
     setResolveError,
     setResolving,
+  });
+
+  useAutoFire({
+    autoActive,
+    attempt,
+    autoCandidates,
+    resolving,
+    autoAttemptIdx,
+    autoSettleReady,
+    pipelineDone,
+    firstResultAt,
+    isCached,
+    preferredLangs,
+    hasStrongAddon,
+    isTorrentioStream,
+    autoFiredRef,
+    setAutoSettleReady,
+    setAutoCancelled,
+    onPlay,
   });
 
   const allCount = filteredPicker?.all.length ?? 0;

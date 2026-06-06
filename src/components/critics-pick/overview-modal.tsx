@@ -96,9 +96,6 @@ export function OverviewModal({
               <p className="font-display text-[15px] leading-[1.65] text-ink/90 whitespace-pre-wrap">
                 <LinkedReview text={review.content} people={people} onPersonClick={onPersonClick} />
               </p>
-              {tagline && (
-                <p className="text-[12.5px] italic text-ink-subtle">Tagline: {tagline}</p>
-              )}
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-edge-soft pt-3 text-[12px] text-ink-muted">
               <span className="flex items-center gap-2">

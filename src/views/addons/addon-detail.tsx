@@ -1,7 +1,6 @@
 import { Check, Copy, Eye, EyeOff, ExternalLink, Loader2, Settings2, Star, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AddonLogo, resolveAddonLogo } from "@/components/addon-logo";
-import { RateViewport } from "@/components/rate-viewport";
 import { setActiveAddon } from "@/lib/active-addon";
 import { manifestToConfigureUrl, manifestToShareUrl } from "@/lib/addon-store";
 import { categorizeAddon, isAdultAddon, type ResolvedAddon } from "@/lib/addons-store/store";
@@ -17,8 +16,6 @@ import { CATEGORY_LABELS } from "./addons-types";
 import { idOf, nameOf, resourceLabels } from "./addons-utils";
 import { DetailRail } from "./detail-rail";
 import { TagRow } from "./tag-row";
-
-const STREMIO_ADDONS_LOGO = "https://harbor.site/discord/stremio-addons.png";
 
 export function AddonDetail({
   resolved,
@@ -51,11 +48,15 @@ export function AddonDetail({
   const stremioShareUrl = manifestToShareUrl(resolved.transportUrl, "stremio");
 
   const [copied, setCopied] = useState<"https" | "stremio" | null>(null);
-  const [rateOpen, setRateOpen] = useState(false);
   const [busy, setBusy] = useState<"install" | "remove" | null>(null);
   const [optimisticInstalled, setOptimisticInstalled] = useState<boolean | null>(null);
   const [manifestVisible, setManifestVisible] = useState(false);
   const community = useCommunity(m?.id);
+  const openRate = () => {
+    if (!community) return;
+    openUrl(rateOnSiteUrl(community.slug));
+    showToast("ok", "Opening stremio-addons.net in your browser to sign in and rate");
+  };
 
   useEffect(() => {
     setActiveAddon({ id: idOf(resolved), name: nameOf(resolved) });
@@ -83,18 +84,12 @@ export function AddonDetail({
     const rawLogo = resolveAddonLogo(m?.logo, resolved.transportUrl);
     const largeImage = rawLogo && rawLogo.startsWith("https://") ? rawLogo : undefined;
     const shared = { largeImage, largeText: addonName };
-    const hint = rateOpen
-      ? {
-          details: `Rating ${addonName}`,
-          state: "stremio-addons.net",
-          largeImage: STREMIO_ADDONS_LOGO,
-          largeText: "stremio-addons.net",
-        }
-      : busy === "install"
+    const hint =
+      busy === "install"
         ? { details: `Installing ${addonName}`, ...shared }
         : { details: `Browsing ${addonName}`, state: "Stremio addon", ...shared };
     return pushActivityHint(hint);
-  }, [resolved, m?.logo, rateOpen, busy]);
+  }, [resolved, m?.logo, busy]);
 
   useEffect(() => {
     const onChange = (e: Event) => {
@@ -180,7 +175,7 @@ export function AddonDetail({
         {community && (
           <button
             type="button"
-            onClick={() => setRateOpen(true)}
+            onClick={openRate}
             className="absolute right-12 top-32 flex items-baseline gap-2 leading-none transition-opacity hover:opacity-80"
             title="Rate on stremio-addons.net"
           >
@@ -283,7 +278,7 @@ export function AddonDetail({
               <>
                 <span className="mx-1 h-6 w-px shrink-0 bg-edge-soft" aria-hidden />
                 <button
-                  onClick={() => setRateOpen(true)}
+                  onClick={openRate}
                   className="flex h-11 items-center gap-2 rounded-full border border-accent/40 bg-accent-soft px-5 text-[13.5px] font-semibold text-accent transition-colors hover:border-accent hover:bg-accent-soft/80"
                 >
                   <Star size={14} strokeWidth={2.4} fill="currentColor" className="harbor-rating-star" />
@@ -312,15 +307,6 @@ export function AddonDetail({
           <TagRow resolved={resolved} />
         </div>
       </header>
-
-      {rateOpen && community && (
-        <RateViewport
-          url={rateOnSiteUrl(community.slug)}
-          title={nameOf(resolved)}
-          logo={resolveAddonLogo(m?.logo, resolved.transportUrl)}
-          onClose={() => setRateOpen(false)}
-        />
-      )}
 
       {c?.warnings && c.warnings.length > 0 && (
         <section className="mt-8 rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5">

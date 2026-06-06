@@ -1,7 +1,7 @@
 {
   "name": "harbor",
   "private": true,
-  "version": "0.8.9",
+  "version": "0.9.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "setup:libmpv": "node scripts/fetch-libmpv.mjs",
-    "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs"
+    "setup:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "setup:fonts": "node scripts/fetch-fonts.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

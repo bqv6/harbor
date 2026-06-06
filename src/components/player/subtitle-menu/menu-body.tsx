@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Flag } from "@/components/flag";
 import type { TrackInfo } from "@/lib/player/bridge";
 import { languageName } from "@/lib/subtitles/language";
+import { Tooltip } from "../transport/tooltip";
 import { DelayRow } from "./delay-row";
 import { SearchSection } from "./search-section";
 import type { SubtitleMenuProps } from "./types";
@@ -256,14 +257,15 @@ export function MenuBody(props: SubtitleMenuProps & { onClose: () => void }) {
               {searchOpen ? "Hide search" : "Find more subtitles"}
             </button>
             {isTauri && (
-              <button
-                onClick={() => void loadLocal()}
-                title="Load a subtitle file from your computer"
-                className="flex shrink-0 items-center gap-2 border-l border-edge-soft px-3 py-2 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-canvas/40 hover:text-ink"
-              >
-                <FolderOpen size={12} strokeWidth={2.2} />
-                Load file
-              </button>
+              <Tooltip label="Load a .srt or .ass from your computer" align="end">
+                <button
+                  onClick={() => void loadLocal()}
+                  className="flex h-full shrink-0 items-center gap-2 border-l border-edge-soft px-3 py-2 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-canvas/40 hover:text-ink"
+                >
+                  <FolderOpen size={12} strokeWidth={2.2} />
+                  Load file
+                </button>
+              </Tooltip>
             )}
           </div>
 

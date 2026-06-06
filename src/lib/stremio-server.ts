@@ -52,6 +52,7 @@ export async function awaitCastServerReady(timeoutMs = 5000): Promise<boolean> {
     await new Promise((r) => window.setTimeout(r, READY_WAIT_POLL_MS));
     const s = await getCastServerStatus();
     if (s?.ready) return true;
+    if (await httpProbe(true)) return true;
     if (s && !s.running && s.restart_count >= 3) return false;
   }
   return false;
@@ -62,8 +63,7 @@ export async function probeStremioServer(force = false): Promise<boolean> {
     const status = await getCastServerStatus();
     if (status) {
       if (status.ready) return true;
-      if (!status.bundled) return httpProbe(force);
-      return false;
+      return httpProbe(force);
     }
   }
   return httpProbe(force);
@@ -82,10 +82,11 @@ async function httpProbe(force: boolean): Promise<boolean> {
     });
     window.clearTimeout(timer);
     const ok = res.ok;
-    probeCache = { ok, at: Date.now() };
+    if (ok) probeCache = { ok, at: Date.now() };
+    else probeCache = null;
     return ok;
   } catch {
-    probeCache = { ok: false, at: Date.now() };
+    probeCache = null;
     return false;
   }
 }

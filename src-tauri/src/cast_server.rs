@@ -162,20 +162,33 @@ fn spawn_once(app: &AppHandle) {
         let Some(client) = client else {
             return;
         };
-        while started.elapsed() < READY_DEADLINE {
+        let mut warned = false;
+        loop {
             tokio::time::sleep(Duration::from_millis(400)).await;
+            {
+                let st = state().lock().unwrap();
+                if st.child.is_none() {
+                    return;
+                }
+            }
             if let Ok(resp) = client.get(PROBE_URL).send().await {
                 if resp.status().is_success() {
                     let mut st = state().lock().unwrap();
+                    if st.child.is_none() {
+                        return;
+                    }
                     st.ready = true;
+                    st.last_error = None;
                     eprintln!("[cast-server] ready in {:?}", started.elapsed());
                     return;
                 }
             }
+            if !warned && started.elapsed() > READY_DEADLINE {
+                warned = true;
+                let mut st = state().lock().unwrap();
+                st.last_error = Some("slow to become ready (>20s), still polling".to_string());
+            }
         }
-        let mut st = state().lock().unwrap();
-        st.last_error = Some("did not become ready within 20s".to_string());
-        eprintln!("[cast-server] did not become ready within 20s");
     });
 }
 

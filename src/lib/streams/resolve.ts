@@ -6,7 +6,10 @@ import {
   buildTorrentStreamUrl,
   createAndListFiles,
   directTorrentEnabled,
+  engineP2pEligible,
+  isVideoFile,
   trackersFromSources,
+  type TorrentFile,
 } from "@/lib/torrent/stremio-stream";
 import type { ParsedStream, ScoredStream } from "./types";
 
@@ -61,15 +64,28 @@ export async function resolveStream(
   if (debrids.length === 0) {
     const direct = await tryStremioServer(stream);
     if (direct) return { ok: true, data: direct, via: "stremio-server" };
-    return { ok: false, code: "no-debrid-configured", tried };
+    const code = directTorrentEnabled() ? "engine-not-ready" : "direct-torrent-disabled";
+    return { ok: false, code, tried };
   }
   const sorted = sortDebridsForStream(stream, debrids);
   if (!userCommitted) {
     const cachedMap = stream.cached ?? {};
     const libMap = (stream as { inLibrary?: Record<string, boolean> }).inLibrary ?? {};
-    if (!sorted.some((d) => cachedMap[d.slug] === true || libMap[d.slug] === true)) {
+    const anyCached = sorted.some((d) => cachedMap[d.slug] === true || libMap[d.slug] === true);
+    if (!anyCached) {
+      if (engineP2pEligible(stream)) {
+        const direct = await tryStremioServer(stream);
+        if (direct) return { ok: true, data: direct, via: "stremio-server" };
+      }
       return { ok: false, code: "uncached-not-committed", tried };
     }
+  }
+  const cachedMap = stream.cached ?? {};
+  const libMap = (stream as { inLibrary?: Record<string, boolean> }).inLibrary ?? {};
+  const anyCached = sorted.some((d) => cachedMap[d.slug] === true || libMap[d.slug] === true);
+  if (userCommitted && !anyCached && engineP2pEligible(stream)) {
+    const direct = await tryStremioServer(stream);
+    if (direct) return { ok: true, data: direct, via: "stremio-server" };
   }
   const magnet = magnetFromHash(stream.infoHash);
   for (const d of sorted) {
@@ -87,6 +103,9 @@ export async function resolveStream(
     dwarn(`[resolve] ${d.slug} returned suspicious link (likely error/downloading video), trying next debrid`);
     tried.push({ slug: d.slug, code: "stub-or-error-video" });
   }
+  const direct = await tryStremioServer(stream);
+  if (direct) return { ok: true, data: direct, via: "stremio-server" };
+  if (directTorrentEnabled()) return { ok: false, code: "engine-not-ready", tried };
   return { ok: false, code: tried[tried.length - 1]?.code ?? "all-debrids-failed", tried };
 }
 
@@ -154,11 +173,12 @@ export async function resolveViaDebrids(
   debrids: DebridStore[],
   signal: AbortSignal,
   userCommitted = false,
+  inLibrary: Record<string, boolean> = {},
 ): Promise<ResolveResult> {
   if (!hash || debrids.length === 0) return { ok: false, code: "no-debrid-configured", tried: [] };
   const stream = { infoHash: hash, fileIdx, cached } as unknown as ScoredStream;
   const sorted = sortDebridsForStream(stream, debrids);
-  if (!userCommitted && !sorted.some((d) => cached[d.slug] === true)) {
+  if (!userCommitted && !sorted.some((d) => cached[d.slug] === true || inLibrary[d.slug] === true)) {
     return { ok: false, code: "uncached-not-committed", tried: [] };
   }
   const magnet = magnetFromHash(hash);
@@ -180,19 +200,38 @@ export async function resolveViaDebrids(
 
 async function tryStremioServer(stream: ParsedStream | ScoredStream): Promise<DirectLink | null> {
   if (!stream.infoHash || !directTorrentEnabled()) return null;
-  const ready = await probeStremioServer();
+  const ready = await probeStremioServer(true);
   if (!ready) return null;
   const filename = stream.behaviorHints?.filename ?? stream.behaviorHints?.fileName ?? null;
-  await createAndListFiles(stream.infoHash, trackersFromSources(stream.sources));
+  const files = await createAndListFiles(stream.infoHash, trackersFromSources(stream.sources));
+  let chosenIdx = stream.fileIdx;
+  if ((chosenIdx == null || chosenIdx < 0) && files && files.length > 0) {
+    chosenIdx = selectEngineFileIdx(files, stream.season, stream.episode);
+  }
   return {
     url: buildTorrentStreamUrl({
       infoHash: stream.infoHash,
-      fileIdx: stream.fileIdx,
+      fileIdx: chosenIdx,
       sources: stream.sources,
       filename,
     }),
+    fileIdx: chosenIdx,
     filename: filename ?? undefined,
     notWebReady: stream.behaviorHints?.notWebReady,
     subtitles: stream.subtitles?.map((s) => ({ url: s.url, lang: s.lang, id: s.id })),
   };
+}
+
+function selectEngineFileIdx(files: TorrentFile[], season?: number | null, episode?: number | null): number {
+  const vids = files.filter(isVideoFile);
+  const pool = vids.length > 0 ? vids : files;
+  if (season != null && episode != null) {
+    const s = String(season).padStart(2, "0");
+    const e = String(episode).padStart(2, "0");
+    const re = new RegExp(`s0*${season}[^0-9]?e0*${episode}(?![0-9])|${s}${e}(?![0-9])|\\b${season}x0*${episode}(?![0-9])`, "i");
+    const matched = pool.find((f) => re.test(f.name));
+    if (matched) return matched.idx;
+  }
+  const largest = pool.reduce((a, b) => (b.length > a.length ? b : a));
+  return largest.idx;
 }

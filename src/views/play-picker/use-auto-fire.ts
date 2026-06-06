@@ -1,0 +1,87 @@
+import { useEffect, useRef, useState } from "react";
+import { engineP2pEligible } from "@/lib/torrent/stremio-stream";
+import type { ScoredStream } from "@/lib/streams/types";
+import { hasInstantMarker, streamMatchesLangs } from "./picker-utils";
+
+const AUTO_SETTLE_MS = 1500;
+const HIGH_CONFIDENCE_GRACE_MS = 350;
+
+export function useAutoFire(args: {
+  autoActive: boolean;
+  attempt?: number;
+  autoCandidates: ScoredStream[];
+  resolving: unknown;
+  autoAttemptIdx: number;
+  autoSettleReady: boolean;
+  pipelineDone: boolean;
+  firstResultAt: number | null;
+  isCached: (s: ScoredStream) => boolean;
+  preferredLangs: string[];
+  hasStrongAddon: boolean;
+  isTorrentioStream: (s: ScoredStream) => boolean;
+  autoFiredRef: React.MutableRefObject<boolean>;
+  setAutoSettleReady: (v: boolean) => void;
+  setAutoCancelled: (v: boolean) => void;
+  onPlay: (s: ScoredStream, committed: boolean) => void;
+}): void {
+  const {
+    autoActive, attempt, autoCandidates, resolving, autoAttemptIdx, autoSettleReady,
+    pipelineDone, firstResultAt, isCached, preferredLangs, hasStrongAddon, isTorrentioStream,
+    autoFiredRef, setAutoSettleReady, setAutoCancelled, onPlay,
+  } = args;
+  const highConfidenceSinceRef = useRef<number | null>(null);
+  const [highConfidenceTick, setHighConfidenceTick] = useState(0);
+
+  useEffect(() => {
+    if (!autoActive || autoFiredRef.current || pipelineDone || autoSettleReady) return;
+    const top = autoCandidates[0];
+    const langOk = preferredLangs.length === 0 || (top != null && streamMatchesLangs(top, preferredLangs));
+    if (!top || !hasInstantMarker(top) || !isCached(top) || !langOk || (hasStrongAddon && isTorrentioStream(top))) {
+      highConfidenceSinceRef.current = null;
+      return;
+    }
+    const t = window.setTimeout(() => setHighConfidenceTick((n) => n + 1), HIGH_CONFIDENCE_GRACE_MS + 20);
+    return () => window.clearTimeout(t);
+  }, [autoActive, pipelineDone, autoSettleReady, autoCandidates, isCached, preferredLangs, hasStrongAddon, isTorrentioStream, autoFiredRef]);
+
+  useEffect(() => {
+    if (!autoActive || autoSettleReady || pipelineDone) return;
+    if (firstResultAt == null) return;
+    const elapsed = performance.now() - firstResultAt;
+    const remaining = Math.max(0, AUTO_SETTLE_MS - elapsed);
+    const t = window.setTimeout(() => setAutoSettleReady(true), remaining);
+    return () => window.clearTimeout(t);
+  }, [autoActive, autoSettleReady, pipelineDone, firstResultAt, setAutoSettleReady]);
+
+  useEffect(() => {
+    if (!autoActive || autoFiredRef.current) return;
+    const top = autoCandidates[0];
+    const isFirstAttempt = (attempt ?? 0) === 0 && autoAttemptIdx === 0;
+    const langOk = preferredLangs.length === 0 || (top != null && streamMatchesLangs(top, preferredLangs));
+    const highConfidenceTop =
+      top != null && hasInstantMarker(top) && isCached(top) && langOk &&
+      (!hasStrongAddon || !isTorrentioStream(top));
+    if (isFirstAttempt && !pipelineDone) {
+      if (highConfidenceTop) {
+        const now = performance.now();
+        if (highConfidenceSinceRef.current == null) highConfidenceSinceRef.current = now;
+        if (now - highConfidenceSinceRef.current < HIGH_CONFIDENCE_GRACE_MS) return;
+      } else {
+        highConfidenceSinceRef.current = null;
+        if (!autoSettleReady) return;
+      }
+    }
+    if (autoCandidates.length === 0) return;
+    if (resolving) return;
+    const idx = Math.min((attempt ?? 0) + autoAttemptIdx, autoCandidates.length - 1);
+    const pick = autoCandidates[idx];
+    if (!pick) return;
+    const pickInstant = isCached(pick) || !!pick.url || engineP2pEligible(pick);
+    if (!pickInstant) {
+      if (pipelineDone) setAutoCancelled(true);
+      return;
+    }
+    autoFiredRef.current = true;
+    onPlay(pick, false);
+  }, [autoActive, attempt, autoCandidates, resolving, autoAttemptIdx, autoSettleReady, pipelineDone, isCached, preferredLangs, hasStrongAddon, isTorrentioStream, autoFiredRef, setAutoCancelled, onPlay, highConfidenceTick]);
+}

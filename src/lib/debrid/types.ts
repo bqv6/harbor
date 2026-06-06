@@ -20,6 +20,7 @@ export type CacheMap = Record<string, boolean>;
 
 export type DirectLink = {
   url: string;
+  fileIdx?: number | null;
   filename?: string;
   filesize?: number;
   headers?: Record<string, string>;

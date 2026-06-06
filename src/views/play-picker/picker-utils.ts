@@ -337,6 +337,10 @@ export function humanError(code: string): string {
       return "None of your debrid services could resolve this stream. Try a different one.";
     case "no-debrid-configured":
       return "Add a debrid provider in Settings first.";
+    case "engine-not-ready":
+      return "Harbor's local streaming engine isn't ready yet. Give it a few seconds and hit Play again.";
+    case "direct-torrent-disabled":
+      return "Direct torrent streaming is turned off. Turn it on in Settings > Player to stream torrents without a debrid.";
     case "no-source":
       return "This stream has no playable source.";
     case "addon-not-configured":

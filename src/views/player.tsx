@@ -160,6 +160,8 @@ import { useDrawMode } from "./player/hooks/use-draw-mode";
 import { useChromeVisibility } from "./player/hooks/use-chrome-visibility";
 import { useKeyboardShortcuts } from "./player/hooks/use-keyboard-shortcuts";
 import { useAutoRetry } from "./player/hooks/use-auto-retry";
+import { useEngineStats } from "./player/hooks/use-engine-stats";
+import { isBundledEngineUrl } from "@/lib/stremio-server";
 import { useTrackAutoload } from "./player/hooks/use-track-autoload";
 import { useTrickplay } from "./player/hooks/use-trickplay";
 import { applySubStyle } from "@/lib/player/sub-style";
@@ -254,6 +256,14 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     src,
     settings,
   });
+  const isP2pEngine =
+    isBundledEngineUrl(src.url) && !src.url.includes("/hlsv2/") && !!src.streamRef?.infoHash;
+  const { stats: engineStats, genuineFailure } = useEngineStats({
+    url: src.url,
+    infoHash: src.streamRef?.infoHash ?? null,
+    fileIdx: src.streamRef?.fileIdx ?? null,
+    active: snap.status !== "ended" && snap.videoWidth <= 0,
+  });
   useWebviewMemory(engine === "mpv");
   const shellSnapRef = useRef(snap);
   const volumeRestoredRef = useRef(false);
@@ -316,6 +326,8 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
     debrids,
     selfFrameReadyRef,
     openPicker,
+    engineFailure: genuineFailure,
+    isP2pEngine,
   });
 
   useEffect(() => {
@@ -1031,6 +1043,7 @@ export function PlayerView({ src }: { src: PlayerSrc }) {
           snap={snap}
           forceShow={swappingEp || swapResolvingKey != null}
           onCancel={closePlayer}
+          engineStats={engineStats}
         />
       )}
 

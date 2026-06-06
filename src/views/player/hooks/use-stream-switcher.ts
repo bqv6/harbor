@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { PlayerBridge, PlayerSnapshot } from "@/lib/player/bridge";
 import { getPlaybackPosition, usePlaybackFlag } from "@/lib/player/playback-clock";
 import { pinPickerCache, unpinPickerCache } from "@/lib/picker-cache";
+import { readResumeMs } from "@/lib/resume";
 import { resolveStream } from "@/lib/streams/resolve";
 import type { ScoredStream } from "@/lib/streams/types";
 import { registerStreamProxy } from "@/lib/stream-proxy";
@@ -98,7 +99,10 @@ export function useStreamSwitcher(params: {
         return;
       }
       try {
-        const resumeAt = getPlaybackPosition();
+        const current = getPlaybackPosition();
+        const savedSec =
+          readResumeMs(src.meta.id, src.episode?.season, src.episode?.episode) / 1000;
+        const resumeAt = current > 5 ? current : savedSec;
         await b.load({
           url: playUrl,
           subtitles: r.data.subtitles,

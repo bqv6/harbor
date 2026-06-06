@@ -355,6 +355,15 @@ pub async fn mpv_start(
         let _ = mpv.set_property("secondary-sub-visibility", "no");
     }
 
+    if let Some(fonts) = crate::fonts::locate_fonts_dir(&app) {
+        if let Some(s) = fonts.to_str() {
+            let _ = mpv.set_property("sub-fonts-dir", s);
+        }
+    }
+    let _ = mpv.set_property("sub-font-provider", "auto");
+    let _ = mpv.set_property("sub-font", "Noto Sans JP");
+    let _ = mpv.set_property("embeddedfonts", "yes");
+
     if let Some(subs) = &args.subtitles {
         for s in subs {
             let _ = mpv_argv_command(&mpv, &["sub-add", &s.url, "auto"]);

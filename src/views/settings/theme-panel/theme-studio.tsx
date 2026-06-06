@@ -111,6 +111,13 @@ export function ThemeStudio({ seed, onClose }: { seed?: ThemePreset; onClose: ()
   liveThemeRef.current = settings.theme;
   const [popoutTab, setPopoutTab] = useState<CodeLang | null>(null);
   const { inspectorHidden, setInspectorHidden } = useStudioPreview(draft.layout, draft.bokeh);
+  const [initialJson] = useState(() => JSON.stringify(emptyDraft(seed)));
+  const [confirmClose, setConfirmClose] = useState(false);
+  const dirty = useMemo(() => JSON.stringify(draft) !== initialJson, [draft, initialJson]);
+  const requestClose = () => {
+    if (dirty) setConfirmClose(true);
+    else onClose();
+  };
 
   useEffect(() => pushOverlayPin(), []);
 
@@ -204,13 +211,14 @@ export function ThemeStudio({ seed, onClose }: { seed?: ThemePreset; onClose: ()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (popoutTab) setPopoutTab(null);
+      if (confirmClose) setConfirmClose(false);
+      else if (popoutTab) setPopoutTab(null);
       else if (inspectorHidden) setInspectorHidden(false);
-      else onClose();
+      else requestClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, inspectorHidden, setInspectorHidden, popoutTab]);
+  }, [onClose, inspectorHidden, setInspectorHidden, popoutTab, confirmClose, dirty]);
 
   const runJs = () => {
     const code = draft.js.trim();
@@ -311,7 +319,7 @@ export function ThemeStudio({ seed, onClose }: { seed?: ThemePreset; onClose: ()
       >
         <StudioHeader
           name={trimmedName}
-          onCancel={onClose}
+          onCancel={requestClose}
           onHidePanel={() => setInspectorHidden(true)}
         />
         <Inspector
@@ -366,6 +374,50 @@ export function ThemeStudio({ seed, onClose }: { seed?: ThemePreset; onClose: ()
           onRunJs={runJs}
           onClose={() => setPopoutTab(null)}
         />
+      )}
+
+      {confirmClose && (
+        <div
+          className="animate-in fade-in pointer-events-auto fixed inset-0 z-[230] flex items-center justify-center bg-black/55 px-4 backdrop-blur-[2px] duration-150"
+          onClick={() => setConfirmClose(false)}
+        >
+          <div
+            style={STABLE_CHROME}
+            onClick={(e) => e.stopPropagation()}
+            className="animate-in zoom-in-95 fade-in w-[340px] max-w-full overflow-hidden rounded-2xl border border-edge bg-elevated shadow-[0_30px_80px_-24px_rgba(0,0,0,0.8)] duration-150"
+          >
+            <div className="h-1 w-full" style={{ background: "var(--color-accent)" }} />
+            <div className="flex flex-col px-6 pb-6 pt-5">
+              <h2 className="text-[17px] font-semibold tracking-tight text-ink">
+                Leave without saving?
+              </h2>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-muted">
+                Your changes to this theme aren&apos;t saved yet. They&apos;ll be lost if you leave now.
+              </p>
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmClose(false);
+                    onClose();
+                  }}
+                  className="h-10 rounded-lg px-4 text-[13.5px] font-semibold text-ink-subtle transition-colors hover:bg-danger/12 hover:text-danger"
+                >
+                  Discard
+                </button>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setConfirmClose(false)}
+                  className="h-10 rounded-lg px-5 text-[13.5px] font-semibold text-canvas transition-opacity hover:opacity-90"
+                  style={{ background: "var(--color-accent)" }}
+                >
+                  Keep editing
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>,
     document.body,

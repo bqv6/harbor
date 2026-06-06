@@ -7,6 +7,7 @@ mod cf_relay;
 mod discord_rp;
 mod dlna;
 mod dvr;
+mod fonts;
 mod fullscreen;
 mod http_fetch;
 mod local_lib;

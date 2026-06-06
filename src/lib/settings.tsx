@@ -281,7 +281,7 @@ const DEFAULT: Settings = {
   subBorderSize: 0,
   subMarginY: 12,
   subAlignX: "center",
-  subAssOverride: "force",
+  subAssOverride: "no",
   subStyle: "shadow",
   subFontFamily: "inter",
   customFonts: [],
@@ -415,6 +415,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const parsed = JSON.parse(raw) as Partial<Settings> & {
         _subStyleV2?: boolean;
         _subAssForceV1?: boolean;
+        _subAssRespectV2?: boolean;
         _mpvEmbedV2?: boolean;
         _mpvEmbedV3?: boolean;
         _pickerLayoutStremio?: boolean;
@@ -446,9 +447,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         if (parsed.subMarginY === 22) parsed.subMarginY = DEFAULT.subMarginY;
         parsed._subStyleV2 = true;
       }
-      if (!parsed._subAssForceV1) {
-        if (parsed.subAssOverride === "no") parsed.subAssOverride = "force";
-        parsed._subAssForceV1 = true;
+      if (!parsed._subAssRespectV2) {
+        if (parsed.subAssOverride === "force") parsed.subAssOverride = "no";
+        parsed._subAssRespectV2 = true;
       }
       delete parsed.scrapers;
       delete parsed.scrapersAcknowledged;

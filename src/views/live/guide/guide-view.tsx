@@ -96,6 +96,19 @@ export function GuideView({
   const nowOffsetPx = (nowMs - windowStart) * PX_PER_MS;
   const showNowLine = nowMs >= windowStart && nowMs < windowEnd;
 
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const scrollRafRef = useRef<number | null>(null);
+  const onGridScroll = () => {
+    if (scrollRafRef.current != null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollRef.current;
+      if (el) setScrollLeft(el.scrollLeft);
+    });
+  };
+  const nowLineLeft = Math.max(colPx + nowOffsetPx, scrollLeft + colPx);
+  const nowPillLeft = Math.max(colPx + nowOffsetPx - 22, scrollLeft + colPx);
+
   return (
     <div className="-mx-6 flex flex-col">
       {!epg && (
@@ -106,6 +119,7 @@ export function GuideView({
       )}
       <div
         ref={scrollRef}
+        onScroll={onGridScroll}
         className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div
@@ -196,7 +210,7 @@ export function GuideView({
                 aria-hidden
                 className="pointer-events-none absolute z-[10] w-px bg-danger shadow-[0_0_8px_var(--color-danger)]"
                 style={{
-                  left: colPx + nowOffsetPx,
+                  left: nowLineLeft,
                   top: RULER_HEIGHT_PX,
                   bottom: 0,
                 }}
@@ -205,7 +219,7 @@ export function GuideView({
                 aria-hidden
                 className="pointer-events-none absolute z-[10] flex h-5 items-center rounded-md bg-danger px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-canvas"
                 style={{
-                  left: colPx + nowOffsetPx - 22,
+                  left: nowPillLeft,
                   top: RULER_HEIGHT_PX + 4,
                 }}
               >

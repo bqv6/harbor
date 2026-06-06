@@ -157,7 +157,7 @@ export function usePickHandler({
         attempt: attempt ?? 0,
         streamRef: {
           infoHash: stream.infoHash ?? null,
-          fileIdx: stream.fileIdx ?? null,
+          fileIdx: r.data.fileIdx ?? stream.fileIdx ?? null,
           addonId: stream.addonId ?? null,
           title: stream.title ?? null,
           parsedTitle: stream.parsedTitle ?? null,
