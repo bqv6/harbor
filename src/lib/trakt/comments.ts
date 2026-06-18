@@ -1,5 +1,6 @@
 import { traktRequest } from "./client";
-import type { TraktTarget } from "./types";
+import { getSession } from "./session";
+import type { TraktTarget, TraktIds } from "./types";
 
 export type TraktComment = {
   id: number;
@@ -145,4 +146,21 @@ export async function rateContent(target: TraktTarget, rating: number): Promise<
 export async function removeRating(target: TraktTarget): Promise<void> {
   const path = ratingPath(target);
   await traktRequest(path, { method: "DELETE", authed: true });
+}
+
+export async function getUserRating(target: TraktTarget): Promise<number | null> {
+  const session = getSession();
+  if (!session?.username) return null;
+
+  const epIds = (target as { ids?: TraktIds }).ids;
+  const itemId = target.kind === "episode" ? (epIds?.tmdb ?? epIds?.imdb) : (target.ids?.tmdb ?? target.ids?.imdb);
+  if (!itemId) return null;
+
+  const param = typeof itemId === "number" ? `tmdb=${itemId}` : `imdb=${itemId}`;
+  const type = target.kind === "movie" ? "movies" : target.kind === "episode" ? "episodes" : "shows";
+  const raw = await traktRequest<{ rating: number }[]>(
+    `/users/${session.username}/ratings/${type}?${param}`,
+    { authed: true },
+  ).catch(() => [] as { rating: number }[]);
+  return raw[0]?.rating ?? null;
 }

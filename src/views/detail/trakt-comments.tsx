@@ -8,6 +8,7 @@ import {
   postComment,
   rateContent,
   removeRating,
+  getUserRating,
   type TraktComment,
 } from "@/lib/trakt/comments";
 import { traktRequest, TraktApiError } from "@/lib/trakt/client";
@@ -244,6 +245,7 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
   const connected = !!session;
   const username = session?.username ?? null;
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const target = resolution?.ok ? resolution.target : null;
 
   useEffect(() => {
     return subscribeSession(() => {
@@ -265,7 +267,15 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
     return () => { cancelled = true; };
   }, [connected]);
 
-  const target = resolution?.ok ? resolution.target : null;
+  useEffect(() => {
+    if (!connected || !target) return;
+    let cancelled = false;
+    getUserRating(target).then((r) => {
+      if (cancelled) return;
+      if (r != null) setUserRating(r);
+    });
+    return () => { cancelled = true; };
+  }, [connected, target]);
 
   useEffect(() => {
     if (!target) {
