@@ -296,6 +296,7 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<string>("likes");
   const [showSort, setShowSort] = useState(false);
+  const [myComments, setMyComments] = useState(false);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -465,6 +466,16 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
         <h2 className="text-[20px] font-bold text-ink">{t("Trakt Comments")}</h2>
         {target && (
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMyComments(!myComments)}
+              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-medium ring-1 transition-colors ${
+                myComments
+                  ? "bg-ink text-canvas ring-ink"
+                  : "text-ink-muted ring-edge hover:bg-elevated hover:text-ink"
+              }`}
+            >
+              {t("My")}
+            </button>
             <div ref={sortRef} className="relative">
               <button
                 onClick={() => setShowSort(!showSort)}
@@ -628,9 +639,13 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
         <p className="text-[14px] text-ink-muted">{t("No comments yet")}</p>
       )}
 
-      {target && !loading && comments.length > 0 && (
+      {target && !loading && (myComments ? comments.filter((c) => c.user.username === username) : comments).length === 0 && myComments && (
+        <p className="text-[14px] text-ink-muted">{t("You haven't commented yet")}</p>
+      )}
+
+      {target && !loading && (
         <div className="flex flex-col gap-3">
-          {comments.map((c) => (
+          {(myComments ? comments.filter((c) => c.user.username === username) : comments).map((c) => (
             <CommentCard key={c.id} comment={c} connected={connected} />
           ))}
         </div>
