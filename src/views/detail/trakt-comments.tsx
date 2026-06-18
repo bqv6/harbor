@@ -246,7 +246,12 @@ export function TraktComments({ resolution }: { resolution: IdResolution | null 
       if (e instanceof TraktApiError) {
         try {
           const parsed = JSON.parse(e.body);
-          const msg = parsed.error_description ?? parsed.error ?? `HTTP ${e.status}`;
+          let msg = "";
+          if (parsed.errors && typeof parsed.errors === "object") {
+            const first = Object.values(parsed.errors)[0];
+            if (Array.isArray(first) && first.length > 0) msg = first[0];
+          }
+          if (!msg) msg = parsed.error_description ?? parsed.error ?? `HTTP ${e.status}`;
           setPostError(msg.replace(/^\w+\s*-\s*/, ""));
         } catch {
           setPostError(`HTTP ${e.status}: ${e.body.slice(0, 100) || "(empty body)"}`);
