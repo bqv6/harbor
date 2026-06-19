@@ -695,9 +695,11 @@ pub async fn mpv_set_geometry(
             let y = geom.css_top;
             let w = geom.css_width;
             let h = geom.css_height;
+            let css_view_w = geom.css_view_w;
+            let css_view_h = geom.css_view_h;
             let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
             let _ = app.run_on_main_thread(move || {
-                let _ = crate::mpv_render_linux::resize_to(x, y, w, h);
+                let _ = crate::mpv_render_linux::resize_to(x, y, w, h, css_view_w, css_view_h);
                 let _ = tx.send(());
             });
             let _ = rx.recv_timeout(std::time::Duration::from_millis(300));
