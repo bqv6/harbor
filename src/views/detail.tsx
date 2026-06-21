@@ -93,6 +93,37 @@ import { TraktComments } from "./detail/trakt-comments";
 import { stremioIdToTraktTarget } from "@/lib/trakt/ids";
 import type { IdResolution } from "@/lib/trakt/ids";
 
+function HeroBackdrop({ url }: { url: string }) {
+  const lowUrl = url.replace(/\/t\/p\/(w\d+|original)\//, "/t/p/w300/");
+  const highUrl = url.replace(/\/t\/p\/(w\d+|original)\//, "/t/p/original/");
+  const canBlurUp = lowUrl !== highUrl;
+  const [ready, setReady] = useState(false);
+  return (
+    <>
+      {canBlurUp && (
+        <img
+          src={lowUrl}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className="absolute inset-0 h-full w-full scale-105 object-cover blur-2xl"
+        />
+      )}
+      <img
+        src={highUrl}
+        alt=""
+        decoding="async"
+        fetchPriority="high"
+        ref={(el) => {
+          if (el?.complete) setReady(true);
+        }}
+        onLoad={() => setReady(true)}
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${ready ? "opacity-100" : "opacity-0"}`}
+      />
+    </>
+  );
+}
+
 export function DetailView({
   meta,
   liveContext = false,
@@ -434,7 +465,8 @@ export function DetailView({
   const title = isAnime ? stripFranchiseSuffix(rawTitle) : rawTitle;
   const overview = detail?.overview ?? meta.description ?? "";
   const tagline = detail?.tagline ?? "";
-  const backdrop = pinnedBackdropHi ?? backdrops[backdropIdx] ?? detail?.backdrop ?? meta.background ?? meta.poster;
+  const backdrop =
+  pinnedBackdropHi ?? backdrops[backdropIdx] ?? meta.background ?? detail?.backdrop ?? (loading ? undefined : meta.poster);
   const logo = loading ? detail?.logo : (detail?.logo ?? meta.logo);
   const year = detail?.year ?? meta.releaseInfo;
   const releaseYearNum = parseAwardYear(year);
@@ -614,15 +646,11 @@ export function DetailView({
                 className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1200ms] ${i === backdropIdx ? "opacity-100" : "opacity-0"}`}
               />
             ))
-          ) : backdrop ? (
-            <img
-              src={backdrop}
-              alt=""
-              decoding="async"
-              fetchPriority="high"
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : null}
+            ) : backdrop ? (
+             <HeroBackdrop key={backdrop} url={backdrop} />
+             ) : (
+            <div className="absolute inset-0 animate-pulse bg-white/[0.02]" />
+          )}
           {settings.detailTrailerAutoplay && trailerCandidate && (
             <DetailHeroTrailer candidateId={trailerCandidate} paused={trailerOpen} />
           )}
