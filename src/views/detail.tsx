@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, Pencil, Play, Plus, RotateCcw, Star } from "lucide-react";
 import { animeDetails, franchiseTags, type FranchiseEntry } from "@/lib/providers/anime-detail";
 import { imdbToKitsu, tmdbTvToKitsu } from "@/lib/providers/anime-mapping";
@@ -122,6 +122,21 @@ function HeroBackdrop({ url }: { url: string }) {
       />
     </>
   );
+}
+
+if (typeof document !== "undefined") {
+  const __id = "harbor-fade-in-up-style";
+  if (!document.getElementById(__id)) {
+    const __el = document.createElement("style");
+    __el.id = __id;
+    __el.textContent =
+      "@keyframes harborFadeInUp{from{opacity:0;filter:blur(14px);transform:scale(1.02)}to{opacity:1;filter:blur(0);transform:scale(1)}}.harbor-fade-in-up{animation:harborFadeInUp .6s ease-out both;will-change:filter,opacity,transform}";
+    document.head.appendChild(__el);
+  }
+}
+
+function FadeInUp({ children }: { children: ReactNode }) {
+  return <div className="harbor-fade-in-up">{children}</div>;
 }
 
 export function DetailView({
@@ -921,11 +936,12 @@ export function DetailView({
         {overview && <Synopsis text={overview} />}
         {loading && (meta.type === "series" || isAnime) && <EpisodeGridSkeleton />}
 
-        {isAnime && streamers.length > 0 && <StreamingLinks streamers={streamers} />}
+        {isAnime && streamers.length > 0 && <FadeInUp><StreamingLinks streamers={streamers} /></FadeInUp>}
 
-        {!isAnime && watchProviders.length > 0 && <WatchOn providers={watchProviders} />}
+        {!isAnime && watchProviders.length > 0 && <FadeInUp><WatchOn providers={watchProviders} /></FadeInUp>}
 
         {!liveContext && detail && isAnime && (animeEpisodes.length > 1 || franchise.length > 1) && (
+          <FadeInUp>
           <AnimeEpisodes
             meta={playMeta}
             episodes={animeEpisodes}
@@ -934,9 +950,11 @@ export function DetailView({
             scrollRef={scrollRef}
             trackId={animeCanonicalId ?? undefined}
           />
+          </FadeInUp>
         )}
 
         {!liveContext && detail && !isAnime && isSeries && detail.seasons.length > 0 && (
+          <FadeInUp>
           <SeriesEpisodes
             meta={playMeta}
             tvId={detail.id}
@@ -947,6 +965,7 @@ export function DetailView({
             cinemetaVideos={cinemetaFull?.videos}
             stremioWatched={stremioWatched}
           />
+          </FadeInUp>
         )}
 
         {!liveContext &&
@@ -957,10 +976,11 @@ export function DetailView({
           (addonNative
             ? cinemetaFull.videos.length > 0
             : cinemetaFull.videos.some((v) => v.season != null && v.season > 0 && v.episode != null)) && (
-            <CinemetaEpisodes meta={playMeta} videos={cinemetaFull.videos} />
+            <FadeInUp><CinemetaEpisodes meta={playMeta} videos={cinemetaFull.videos} /></FadeInUp>
           )}
 
         {detail && (detail.directors.length > 0 || detail.creators.length > 0 || detail.writers.length > 0) && (
+          <FadeInUp>
           <div className="grid grid-cols-1 gap-x-12 gap-y-6 border-b border-edge-soft pb-12 sm:grid-cols-2 lg:grid-cols-3">
             {detail.directors.length > 0 && (
               <Credit label={detail.directors.length === 1 ? t("Director") : t("Directors")} people={detail.directors} />
@@ -984,6 +1004,7 @@ export function DetailView({
               <Credit label={detail.editor.length === 1 ? t("Editor") : t("Editors")} people={detail.editor} />
             )}
           </div>
+          </FadeInUp>
         )}
 
         {(() => {
@@ -1073,6 +1094,7 @@ export function DetailView({
                   {layoutEdit ? t("Done editing") : t("Customize layout")}
                 </button>
               </div>
+              <FadeInUp>
               <ContentRails
                 sections={railSections}
                 custom={layout}
@@ -1080,6 +1102,7 @@ export function DetailView({
                 onMove={(k, d) => persist(moveSection(layout, railKeys, k, d))}
                 onToggleHidden={(k) => persist(toggleSectionHidden(layout, k))}
               />
+              </FadeInUp>
             </>
           );
         })()}
