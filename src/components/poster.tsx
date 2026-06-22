@@ -61,9 +61,30 @@ const ASPECT: Record<Ratio, string> = {
   wide: "aspect-[16/7]",
 };
 
+const loadedPosters = new Set<string>();
+
+function lowResUrl(src?: string): string | undefined {
+  if (!src) return undefined;
+  const tmdb = src.match(/^(https?:\/\/image\.tmdb\.org\/t\/p\/)(w\d+|original)(\/.+)$/);
+  if (tmdb) return `${tmdb[1]}w92${tmdb[3]}`;
+  const meta = src.match(/^(https?:\/\/images\.metahub\.space\/poster\/)(small|medium|large)(\/.+)$/);
+  if (meta) return `${meta[1]}small${meta[3]}`;
+  const imdb = src.match(/[?&]imdb_id=(tt\d+)/i);
+  if (imdb) return `https://images.metahub.space/poster/small/${imdb[1]}/img`;
+  return undefined;
+}
+
+function lowResId(id?: string): string | undefined {
+  if (!id) return undefined;
+  const m = id.match(/(tt\d+)/);
+  if (m) return `https://images.metahub.space/poster/small/${m[1]}/img`;
+  return undefined;
+}
+
 export function Poster({
   src,
   seed,
+  lowResImdb,
   ratio = "portrait",
   className = "",
   children,
@@ -72,6 +93,7 @@ export function Poster({
 }: {
   src?: string;
   seed: string;
+  lowResImdb?: string;
   ratio?: Ratio;
   className?: string;
   children?: React.ReactNode;
@@ -79,10 +101,17 @@ export function Poster({
   lazy?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [skipAnim] = useState(false);
   useEffect(() => {
     setFailed(false);
+    setLoaded(false);
   }, [src]);
   const showGradient = !src || failed;
+  const lowSrc = useMemo(
+    () => lowResUrl(src) ?? lowResId(lowResImdb) ?? lowResId(seed),
+    [src, lowResImdb, seed],
+  );
   const hue = hash(seed) % 360;
 
   return (
@@ -90,18 +119,49 @@ export function Poster({
       className={`harbor-poster your-card relative overflow-hidden rounded-xl ${ASPECT[ratio]} ${className}`}
       style={showGradient ? { background: gradient(hue) } : undefined}
     >
+      {lowSrc && !skipAnim && !showGradient && (
+        <img
+          key={lowSrc}
+          src={lowSrc}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          className={`absolute inset-0 h-full w-full scale-110 object-cover blur-xl transition-opacity duration-500 ${loaded ? "opacity-0" : "opacity-100"}`}
+        />
+      )}
       {!showGradient && (
         <img
           key={src}
+          ref={(el) => {
+            if (!el || !el.complete) return;
+            if (el.naturalWidth > 0) setLoaded(true);
+            else {
+              setFailed(true);
+              onError?.();
+            }
+          }}
           src={src}
           alt=""
-          decoding="sync"
+          decoding="async"
           loading={lazy ? "lazy" : undefined}
+          onLoad={() => {
+            if (src) loadedPosters.add(src);
+            setLoaded(true);
+          }}
           onError={() => {
             setFailed(true);
             onError?.();
           }}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300"
+          style={{
+          opacity: failed ? 0 : 1,
+          transform: loaded ? "scale(1)" : "scale(1.06)",
+          filter: loaded ? "blur(0px)" : "blur(14px)",
+          transition: skipAnim
+            ? "none"
+            : "opacity 350ms ease-out, transform 600ms cubic-bezier(0.22, 1, 0.36, 1), filter 500ms ease-out",
+          willChange: "opacity, transform, filter",
+        }}
         />
       )}
       {children}
