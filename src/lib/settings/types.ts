@@ -61,6 +61,9 @@ export type Settings = {
   badgePlacement: "top" | "bottom";
   episodeLayout: "list" | "strip" | "grid";
   episodeSort: "oldest" | "newest";
+  showEpisodeRating: boolean;
+  showEpisodeDescription: boolean;
+  hdEpisodeImages: boolean;
   harborAvatar: string | null;
   harborColor: string;
   anilistAutoSync: boolean;

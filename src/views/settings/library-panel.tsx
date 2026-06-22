@@ -172,6 +172,32 @@ export function LibraryPanel({
       </Section>
 
       <Section
+        title={t("Episode cards")}
+        subtitle={t(
+          "Show the IMDb rating and synopsis on episode artwork across the list, grid, and panel layouts. Turn the description off and the rating drops into the bottom-left corner.",
+        )}
+      >
+        <ToggleRow
+          label={t("Show IMDb rating on episodes")}
+          sub={t("Overlays the episode's IMDb rating on its thumbnail in every episode layout. — Add your free OMDb API key to show real IMDb ratings everywhere (home hero, details, episodes). Without it, ratings fall back to TMDB scores.")}
+          value={settings.showEpisodeRating}
+          onChange={(v) => update({ showEpisodeRating: v })}
+        />
+        <ToggleRow
+          label={t("Show episode description")}
+          sub={t("Shows the episode synopsis on the artwork. Turn it off to hide the synopsis; the rating stays and moves to the bottom-left corner.")}
+          value={settings.showEpisodeDescription}
+          onChange={(v) => update({ showEpisodeDescription: v })}
+        />
+        <ToggleRow
+          label={t("High-quality episode images")}
+          sub={t("Loads full-resolution episode artwork (original) across the list, grid, and panel. Turn off to use lighter images (w300) — better for slow connections or low-end devices.")}
+          value={settings.hdEpisodeImages}
+          onChange={(v) => update({ hdEpisodeImages: v })}
+        />
+      </Section>
+
+      <Section
         title={t("Continue Watching screenshots")}
         subtitle={t("When you back out of a title, Harbor saves a frame so the Continue Watching card looks like the spot you left. Tune how long they stick around, or wipe them all.")}
       >

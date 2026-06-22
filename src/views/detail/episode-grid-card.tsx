@@ -1,7 +1,9 @@
 import { CalendarDays, Check, Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { ImdbIcon } from "@/components/icons/imdb-icon";
 import { Poster } from "@/components/poster";
 import type { Meta } from "@/lib/cinemeta";
+import { useSettings } from "@/lib/settings";
 import { formatAirDate } from "@/lib/dates";
 import { useT } from "@/lib/i18n";
 import { SPOILER_TEXT_CLASS, SPOILER_THUMB_CLASS, type SpoilerMask } from "@/lib/spoilers";
@@ -26,6 +28,7 @@ export function EpisodeGridCard({
   onContextMenu?: (e: React.MouseEvent, season: number, episode: number, watched: boolean) => void;
 }) {
   const t = useT();
+  const { settings } = useSettings();
   const [imgIdx, setImgIdx] = useState(0);
   useEffect(() => setImgIdx(0), [g.key]);
   const [preview, setPreview] = useState(false);
@@ -69,6 +72,24 @@ export function EpisodeGridCard({
           <div className={thumbDim}>
             <Poster src={still} seed={g.key} ratio="landscape" lazy onError={() => setImgIdx((i) => i + 1)} />
           </div>
+          {settings.showEpisodeDescription && g.overview ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 pt-12 text-start">
+              {settings.showEpisodeRating && g.voteAverage && g.voteAverage > 0 ? (
+                <div className="mb-1 flex items-center gap-1.5 drop-shadow-md">
+                  <ImdbIcon className="h-3 w-auto rounded-[2px] shadow-sm" />
+                  <span className="text-[10px] font-bold text-white">{g.voteAverage.toFixed(1)}</span>
+                </div>
+              ) : null}
+              <p className="line-clamp-3 text-[9.5px] leading-[1.35] text-white/95 drop-shadow-md">
+                {g.overview}
+              </p>
+            </div>
+          ) : settings.showEpisodeRating && g.voteAverage && g.voteAverage > 0 ? (
+            <div className="pointer-events-none absolute bottom-2 start-2 z-[5] flex items-center gap-1.5 rounded-md bg-black/55 px-1.5 py-0.5 drop-shadow-md backdrop-blur-sm">
+              <ImdbIcon className="h-3 w-auto rounded-[2px] shadow-sm" />
+              <span className="text-[10px] font-bold text-white">{g.voteAverage.toFixed(1)}</span>
+            </div>
+          ) : null}
           <span className="absolute start-2 top-2 rounded-md bg-canvas/95 px-1.5 py-0.5 text-[11px] font-semibold text-ink">
             {g.number}
           </span>

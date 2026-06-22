@@ -1,5 +1,6 @@
 import { Check, Eye, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ImdbIcon } from "@/components/icons/imdb-icon";
 import { Poster } from "@/components/poster";
 import type { Meta } from "@/lib/cinemeta";
 import { formatAirDate } from "@/lib/dates";
@@ -31,7 +32,7 @@ export function EpisodeRow({
   const t = useT();
   const { openPicker, openEpisodeDetail } = useView();
   const { settings } = useSettings();
-  const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/w300${ep.stillPath}` : undefined;
+  const tmdbStill = ep.stillPath ? `https://image.tmdb.org/t/p/${settings.hdEpisodeImages ? "original" : "w300"}${ep.stillPath}` : undefined;
   const candidates = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -98,6 +99,12 @@ export function EpisodeRow({
               />
             </div>
           )}
+          {settings.showEpisodeRating && ep.voteAverage && ep.voteAverage > 0 ? (
+            <span className="absolute bottom-2 start-2 flex items-center gap-1.5 rounded-md bg-black/55 px-1.5 py-0.5 drop-shadow-md backdrop-blur-sm">
+              <ImdbIcon className="h-3.5 w-auto rounded-[2px] shadow-sm" />
+              <span className="text-[12px] font-bold text-white">{ep.voteAverage.toFixed(1)}</span>
+            </span>
+          ) : null}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h4 className="flex items-center gap-2 truncate text-[16px] font-semibold text-ink">
@@ -112,7 +119,6 @@ export function EpisodeRow({
                 `S${ep.seasonNumber} E${ep.episodeNumber}`,
                 ep.runtime ? t("{n} min", { n: ep.runtime }) : null,
                 formatAirDate(ep.airDate) || null,
-                ep.voteAverage && ep.voteAverage > 0 ? `★ ${ep.voteAverage.toFixed(1)}` : null,
               ]
                 .filter(Boolean)
                 .join("  ·  ")}
