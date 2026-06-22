@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { needsImdbForPoster, needsTmdbForPoster, rpdbPoster } from "@/lib/providers/rpdb";
 import {
   tmdbIdFromImdb,
@@ -104,9 +104,12 @@ export function Poster({
   const effect = settings.posterEffect;
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
   useEffect(() => {
     setFailed(false);
     setLoaded(false);
+    const el = imgRef.current;
+    if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
   }, [src]);
   const showGradient = !src || failed;
   const showPlate = showGradient || (effect !== "blur" && !loaded);
@@ -134,14 +137,7 @@ export function Poster({
       {!showGradient && (
         <img
           key={src}
-          ref={(el) => {
-            if (!el || !el.complete) return;
-            if (el.naturalWidth > 0) setLoaded(true);
-            else {
-              setFailed(true);
-              onError?.();
-            }
-          }}
+          ref={imgRef}
           src={src}
           alt=""
           decoding="async"
