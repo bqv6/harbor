@@ -9,7 +9,7 @@ import { useTogether } from "@/lib/together/provider";
 import { buildMatchScores, matchBadge, MATCH_CLOSE } from "@/lib/together/source-match";
 import { HostSourceBanner } from "@/components/host-source-banner";
 import { consumeRecentStubEvent } from "@/lib/dead-streams";
-import { readPlayback, readLastSeriesPlayback, streamMatchesEntry, streamMatchesSource } from "@/lib/playback-history";
+import { readPlayback, readLastSeriesPlayback, streamMatchesEntry, streamMatchesSource, readSeasonLock, saveSeasonLock } from "@/lib/playback-history";
 import { useSettings } from "@/lib/settings";
 import type { ScoredStream, Tier } from "@/lib/streams/types";
 import { isAddonRanked } from "@/lib/streams/addon-detect";
@@ -263,12 +263,25 @@ export function PlayPicker({
     [meta.id, meta.type, settings.keepSourceNextEpisode, autoPlay],
   );
 
+  const seasonLockMode =
+    settings.seasonSourceLock &&
+    meta.type === "series" &&
+    !isAnimeMetaId &&
+    !isDownload &&
+    !!episode;
+  const seasonLockEntry = useMemo(
+    () => (seasonLockMode ? readSeasonLock(meta.id, episode?.season ?? null) : null),
+    [seasonLockMode, meta.id, episode?.season],
+  );
+  const effectiveAutoPlay = seasonLockMode ? !!autoPlay && !!seasonLockEntry : !!autoPlay;
+  const forceSeasonPackPick = seasonLockMode && !effectiveAutoPlay;
+
   const kidProfile = useActiveKid();
   const p2pAutoConsent = settings.p2pAutoConsent || !!kidProfile;
   const autoCandidates = useAutoCandidates({
     filteredPicker,
     previousPlayback,
-    sourceEntry: lastSeriesSource,
+    sourceEntry: seasonLockMode ? seasonLockEntry : lastSeriesSource,
     isCached,
     addons,
     hasStrongAddon,
@@ -287,7 +300,7 @@ export function PlayPicker({
   const isLiveLikeContent =
     !!meta.type && !["movie", "series", "anime"].includes(String(meta.type).toLowerCase());
   const autoActive =
-    !!((autoPlay && !isLiveLikeContent) || wasInvitedTo(inviteKey)) &&
+    !!((effectiveAutoPlay && !isLiveLikeContent) || wasInvitedTo(inviteKey)) &&
     !autoCancelled &&
     !autoExhausted &&
     !isDownload &&
@@ -349,14 +362,28 @@ export function PlayPicker({
     setFailedStreams,
     setResolveError,
     setResolving,
+    seasonLock: seasonLockMode,
   });
 
   const playManually = useCallback(
     (s: ScoredStream) => {
       setAutoCancelled(true);
+      if (seasonLockMode) {
+        const seriesWide = s.seasonPack === true && s.season == null;
+        saveSeasonLock(meta.id, episode?.season ?? null, {
+          bingeGroup: s.behaviorHints?.bingeGroup ?? null,
+          infoHash: s.infoHash ?? null,
+          addonId: s.addonId ?? null,
+          resolution: s.resolution ?? null,
+          source: s.source ?? null,
+          title: s.title ?? null,
+          parsedTitle: s.parsedTitle ?? null,
+          seriesWide,
+        });
+      }
       onPlay(s);
     },
-    [onPlay],
+    [onPlay, seasonLockMode, meta.id, episode?.season],
   );
 
   const rememberedFiredRef = useRef(false);
@@ -446,17 +473,45 @@ export function PlayPicker({
     const t = window.setTimeout(() => setStubBanner(null), 6000);
     return () => window.clearTimeout(t);
   }, [streamIds]);
+  const [seasonLockRetry, setSeasonLockRetry] = useState(0);
+  useEffect(() => {
+    setSeasonLockRetry(0);
+  }, [meta.id, episode?.season, episode?.episode]);
+  // While in season-lock mode we are still allowed to retry, so do not let
+  // autoExhausted latch on a transient empty result (kick to the picker).
+  const seasonLockRetrying =
+    seasonLockMode && !!seasonLockEntry && seasonLockRetry < 3;
   useEffect(() => {
     if (
-      autoPlay &&
+      effectiveAutoPlay &&
       pipelineDone &&
       autoCandidates.length === 0 &&
       !autoExhausted &&
-      !autoCancelled
+      !autoCancelled &&
+      !seasonLockRetrying
     ) {
       setAutoExhausted(true);
     }
-  }, [autoPlay, pipelineDone, autoCandidates.length, autoExhausted, autoCancelled]);
+  }, [effectiveAutoPlay, pipelineDone, autoCandidates.length, autoExhausted, autoCancelled, seasonLockRetrying]);
+  // Keep refreshing while the locked source is either absent from the list or
+// present but not yet resolvable (e.g. debrid still caching), so a transient
+// empty result never dead-ends into the picker.
+  const seasonLockNeedsRetry =
+    seasonLockMode &&
+    !!seasonLockEntry &&
+    !!filteredPicker &&
+    pipelineDone &&
+    (autoCandidates.length === 0 ||
+      !filteredPicker.all.some((s) => streamMatchesSource(s, seasonLockEntry)));
+  useEffect(() => {
+    if (!seasonLockNeedsRetry) return;
+    if (seasonLockRetry >= 3) return;
+    const t = window.setTimeout(() => {
+      setSeasonLockRetry((n) => n + 1);
+      refresh();
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [seasonLockNeedsRetry, seasonLockRetry, refresh]);
 
   const engineWarming = isEngineWarmingError(resolveError);
   useEffect(() => {
@@ -614,6 +669,7 @@ export function PlayPicker({
             failedStreams={failedStreams}
             preserveOrder={addonOrderMode || !!hostMatch}
             matchFor={hostMatch ? matchFor : undefined}
+            highlightSeasonPacks={forceSeasonPackPick}
             onPlay={playManually}
           />
         ) : (

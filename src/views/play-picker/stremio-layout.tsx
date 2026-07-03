@@ -19,6 +19,7 @@ export function StremioLayout({
   failedStreams,
   preserveOrder,
   matchFor,
+  highlightSeasonPacks,
   onPlay,
 }: {
   streams: ScoredStream[];
@@ -28,6 +29,7 @@ export function StremioLayout({
   failedStreams: Set<ScoredStream>;
   preserveOrder?: boolean;
   matchFor?: (s: ScoredStream) => "same" | "close" | null;
+  highlightSeasonPacks?: boolean;
   onPlay: (stream: ScoredStream) => void;
 }) {
   const [filter, setFilter] = useState<string>("all");
@@ -83,15 +85,21 @@ export function StremioLayout({
     if (activeFilterId && !customFilters.some((f) => f.id === activeFilterId)) setActiveFilterId(null);
   }, [customFilters, activeFilterId]);
   const visibleStreams = useMemo(() => {
+    const floatPacks = (list: ScoredStream[]) => {
+      if (!highlightSeasonPacks) return list;
+      const packs = list.filter((s) => s.seasonPack);
+      if (packs.length === 0) return list;
+      return [...packs, ...list.filter((s) => !s.seasonPack)];
+    };
     const filtered = customFiltered.filter((s) => matchesFacets(s, facet));
-    if (filter !== "all") return filtered;
-    if (preserveOrder) return filtered;
+    if (filter !== "all") return floatPacks(filtered);
+    if (preserveOrder) return floatPacks(filtered);
     const downloadRx = /[⏳⌛⬇⏬🔽📥]|\bdownload(ing)?\b|\bqueued?\b|\bnot[\s_-]?cached\b/iu;
     const isDownload = (s: ScoredStream) => {
       const haystack = `${s.name ?? ""} ${s.title ?? ""} ${s.description ?? ""}`;
       return downloadRx.test(haystack);
     };
-    return filtered.slice().sort((a, b) => {
+      const sorted = filtered.slice().sort((a, b) => {
       const aw = /watchhub/i.test(a.addonId) || /watchhub/i.test(a.addonName ?? "") ? 1 : 0;
       const bw = /watchhub/i.test(b.addonId) || /watchhub/i.test(b.addonName ?? "") ? 1 : 0;
       if (aw !== bw) return aw - bw;
@@ -105,8 +113,9 @@ export function StremioLayout({
       const bi = isInstantText(b) ? 1 : 0;
       if (ai !== bi) return bi - ai;
       return 0;
-    });
-  }, [customFiltered, facet, filter, addonRank, preserveOrder]);
+   });
+    return floatPacks(sorted);
+  }, [customFiltered, facet, filter, addonRank, preserveOrder, highlightSeasonPacks]);
   const filterLabel = filter === "all"
     ? "All"
     : addonOptions.find((o) => o.id === filter)?.name ?? "All";
@@ -195,6 +204,7 @@ export function StremioLayout({
             failed={failedStreams.has(s)}
             addonLogo={addonLogoMap.get(s.addonUrl ?? "") ?? addonLogoMap.get(s.addonId) ?? null}
             match={matchFor ? matchFor(s) : null}
+            seasonPack={!!highlightSeasonPacks && !!s.seasonPack}
             onPlay={() => onPlay(s)}
           />
         ))}

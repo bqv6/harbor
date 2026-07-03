@@ -636,7 +636,7 @@ export function DetailView({
   const smartPlay = useCallback(async (forcePicker = false) => {
     if (inSession) claimHost(true);
     if (!isSeries) {
-      openPicker(playMeta, undefined, { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay });
+      openPicker(playMeta, undefined, { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay });
       return;
     }
     if (isAnime) {
@@ -659,18 +659,18 @@ export function DetailView({
             imdbSeason: wantedEp.imdbSeason,
             imdbEpisode: wantedEp.imdbEpisode,
           },
-          { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay },
+          { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay },
         );
         return;
       }
-      openPicker(playMeta, undefined, { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay });
+      openPicker(playMeta, undefined, { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay });
       return;
     }
     if (lastPlay) {
       openPicker(
         playMeta,
         { season: lastPlay.season, episode: lastPlay.episode },
-        { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay },
+        { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay },
       );
       return;
     }
@@ -694,15 +694,15 @@ export function DetailView({
             season >= 1 &&
             episode >= 1
           ) {
-            openPicker(playMeta, { season, episode }, { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay });
+            openPicker(playMeta, { season, episode }, { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay });
             return;
           }
         }
         if (item) break;
       }
     }
-    openPicker(playMeta, { season: 1, episode: 1 }, { autoPlay: !forcePicker && settings.instantPlay, resume: !forcePicker && settings.instantPlay });
-  }, [isSeries, isAnime, animeEpisodes, lastPlay, openPicker, playMeta, settings.instantPlay, inSession, claimHost, authKey, meta.id, detail?.imdbId]);
+    openPicker(playMeta, { season: 1, episode: 1 }, { autoPlay: !forcePicker && (settings.instantPlay || settings.seasonSourceLock), resume: !forcePicker && settings.instantPlay });
+  }, [isSeries, isAnime, animeEpisodes, lastPlay, openPicker, playMeta, settings.instantPlay, settings.seasonSourceLock, inSession, claimHost, authKey, meta.id, detail?.imdbId]);
   const smartPlayLabel = inSession && !liveContext
     ? t("Play Together")
     : isSeries && lastPlay
@@ -858,6 +858,17 @@ export function DetailView({
                     {smartPlayLabel}
                   </button>
                   </PlayModeHint>
+                )}
+                {settings.seasonSourceLock && !upcoming && (
+                  <button
+                    type="button"
+                    onClick={() => void smartPlay(true)}
+                    title={t("Pick a different season-pack source to lock")}
+                    className="flex h-12 items-center gap-2.5 whitespace-nowrap rounded-full border border-edge bg-canvas/80 px-6 text-[15px] font-medium text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-[transform,background-color,border-color] duration-200 hover:border-ink-subtle hover:bg-canvas/95 active:scale-[0.98]"
+                  >
+                    <RotateCcw size={18} strokeWidth={2} />
+                    {t("Change source")}
+                  </button>
                 )}
                 {actionStage < 2 && (
                   <button

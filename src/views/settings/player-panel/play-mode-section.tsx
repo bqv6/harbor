@@ -6,7 +6,7 @@ export function PlayModePanel() {
   const t = useT();
 
   const choices: Array<{
-    id: "instant" | "manual";
+    id: "instant" | "manual" | "season";
     label: string;
     sub: string;
     recommended?: boolean;
@@ -22,17 +22,29 @@ export function PlayModePanel() {
       label: t("Manual picker"),
       sub: t("Hitting Play opens the source list so you can choose quality, debrid, and audio yourself."),
     },
+    {
+      id: "season",
+      label: t("Lock to season server"),
+      sub: t("Pick one release that has the whole season (or series) once. After that, every episode plays instantly from that same server. Falls back to the best stream if it is ever unavailable."),
+    },
   ];
 
   return (
     <div className="flex flex-col gap-2.5">
       {choices.map((c) => {
-        const selected = (c.id === "instant") === settings.instantPlay;
+        const mode = settings.seasonSourceLock ? "season" : settings.instantPlay ? "instant" : "manual";
+        const selected = c.id === mode;
         return (
           <button
             key={c.id}
             type="button"
-            onClick={() => update({ instantPlay: c.id === "instant" })}
+            onClick={() =>
+              update(
+                c.id === "season"
+                  ? { seasonSourceLock: true }
+                  : { seasonSourceLock: false, instantPlay: c.id === "instant" },
+              )
+            }
             className={`flex items-start gap-3.5 rounded-2xl border px-5 py-4 text-start transition-colors ${
               selected
                 ? "border-ink bg-elevated"

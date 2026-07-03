@@ -191,3 +191,90 @@ export function streamMatchesSource(
     e.source === s.source
   );
 }
+
+//  Season source lock (pin one whole-season / whole-series release) 
+export type SeasonLockEntry = PlaybackEntry & { seriesWide?: boolean };
+
+const SEASON_LOCK_KEY = "harbor.season-lock.v1";
+const SEASON_LOCK_TTL_MS = 120 * 24 * 60 * 60 * 1000;
+const SEASON_LOCK_MAX = 300;
+
+function readSeasonLockMap(): Record<string, SeasonLockEntry> {
+  try {
+    const raw = localStorage.getItem(SEASON_LOCK_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, SeasonLockEntry>;
+    const now = Date.now();
+    const fresh: Record<string, SeasonLockEntry> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (!v?.savedAt) continue;
+      if (now - v.savedAt > SEASON_LOCK_TTL_MS) continue;
+      fresh[k] = v;
+    }
+    return fresh;
+  } catch {
+    return {};
+  }
+}
+
+function writeSeasonLockMap(map: Record<string, SeasonLockEntry>): void {
+  try {
+    const keys = Object.keys(map);
+    if (keys.length > SEASON_LOCK_MAX) {
+      const sorted = Object.entries(map).sort((a, b) => b[1].savedAt - a[1].savedAt);
+      map = Object.fromEntries(sorted.slice(0, SEASON_LOCK_MAX));
+    }
+    localStorage.setItem(SEASON_LOCK_KEY, JSON.stringify(map));
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === "QuotaExceededError" || e.code === 22)) {
+      try {
+        localStorage.removeItem(SEASON_LOCK_KEY);
+      } catch {}
+    }
+  }
+  listeners.forEach((l) => l());
+}
+
+function seasonLockKey(metaId: string, season: number | null | undefined): string {
+  return typeof season === "number" ? `${metaId}|s${season}` : `${metaId}|all`;
+}
+
+export function saveSeasonLock(
+  metaId: string,
+  season: number | null | undefined,
+  entry: Omit<SeasonLockEntry, "savedAt">,
+): void {
+  if (!metaId) return;
+  const map = readSeasonLockMap();
+  const key = entry.seriesWide ? `${metaId}|all` : seasonLockKey(metaId, season);
+  map[key] = { ...entry, savedAt: Date.now() };
+  writeSeasonLockMap(map);
+}
+
+export function readSeasonLock(
+  metaId: string,
+  season?: number | null,
+): SeasonLockEntry | null {
+  if (!metaId) return null;
+  const map = readSeasonLockMap();
+  if (typeof season === "number") {
+    const specific = map[`${metaId}|s${season}`];
+    if (specific) return specific;
+  }
+  return map[`${metaId}|all`] ?? null;
+}
+
+export function clearSeasonLock(metaId: string, season?: number | null): void {
+  const map = readSeasonLockMap();
+  let changed = false;
+  const specific = seasonLockKey(metaId, season);
+  if (map[specific]) {
+    delete map[specific];
+    changed = true;
+  }
+  if (map[`${metaId}|all`]) {
+    delete map[`${metaId}|all`];
+    changed = true;
+  }
+  if (changed) writeSeasonLockMap(map);
+}

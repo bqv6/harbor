@@ -25,6 +25,37 @@ import {
 const REMUX_RX = /\bRemux\b/i;
 const HARDCODED_RX = /\b(HC|HARDCODED|HARDSUB)\b/i;
 
+// Season-pack detection that inspects each source line separately
+// release named "...S04..." whose inner file is "...S04E03..." is still
+// recognised as a whole-season (or whole-series) pack.
+const SP_EPISODE_RX = /\bS\d{1,2}\s*[._-]?\s*E\d{1,3}\b|\bE\d{1,3}\b|\bEpisode\s*\d{1,3}\b|\b\d{1,2}x\d{1,3}\b/i;
+const SP_SEASON_RX = /\bS\d{1,2}\b|\bSeason\s*\d{1,2}\b/i;
+const SP_SEASON_RANGE_RX = /\bS\d{1,2}\s*[-\u2013]\s*S?\d{1,2}\b|\bSeasons?\s*\d{1,2}\s*(?:[-\u2013]|to)\s*\d{1,2}\b/i;
+const SP_COMPLETE_RX = /\bComplete\b/i;
+const SP_SERIESISH_RX = /\bS\d{1,2}\b|\bSeasons?\b|\bSeries\b/i;
+
+function detectSeasonPackFromNames(stream: Stream): boolean {
+  const lines: string[] = [];
+  for (const raw of [stream.name, stream.title, stream.description]) {
+    if (!raw) continue;
+    for (const line of raw.split(/\r?\n/)) {
+      const t = line.trim();
+      if (t) lines.push(t);
+    }
+  }
+  // Explicit multi-season ranges or "complete" collections are always packs.
+  for (const line of lines) {
+    if (SP_SEASON_RANGE_RX.test(line)) return true;
+    if (SP_COMPLETE_RX.test(line) && SP_SERIESISH_RX.test(line)) return true;
+  }
+  // A line that carries a season marker but no episode marker means the
+  // release name is shared across every episode -> season pack.
+  for (const line of lines) {
+    if (SP_SEASON_RX.test(line) && !SP_EPISODE_RX.test(line)) return true;
+  }
+  return false;
+}
+
 export function parseStream(stream: Stream): ParsedStream {
   const filenameLine = extractFilenameLine(stream);
   const text = [filenameLine, stream.title, stream.description, stream.name]
@@ -53,7 +84,7 @@ export function parseStream(stream: Stream): ParsedStream {
   const yearRange = parseYearRange(text);
   const season = ptt.season ?? null;
   const episode = ptt.episode ?? null;
-  const seasonPack = parseSeasonPack(text, ptt);
+  const seasonPack = parseSeasonPack(text, ptt) || detectSeasonPackFromNames(stream);
   const discIndex = parseDisc(text);
   const repackIteration = parseRepackIteration(text, ptt);
   const proper = ptt.proper === true;

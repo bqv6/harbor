@@ -12,12 +12,14 @@ export function StremioRow({
   failed,
   addonLogo,
   match = null,
+  seasonPack = false,
   onPlay,
 }: {
   stream: ScoredStream;
   failed: boolean;
   addonLogo: string | null;
   match?: "same" | "close" | null;
+  seasonPack?: boolean;
   onPlay: () => void;
 }) {
   const { settings } = useSettings();
@@ -51,8 +53,13 @@ export function StremioRow({
             {description}
           </p>
         )}
-        {(badges.length > 0 || match || stream.edition) && (
+        {(badges.length > 0 || match || stream.edition || seasonPack) && (
           <div className="flex flex-wrap items-center gap-1.5">
+            {seasonPack && (
+              <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                {"Season pack"}
+              </span>
+            )}
             <HostMatchChip match={match} />
             {badges.map((k) => (
               <FormatBadge key={k} kind={k} size="sm" />

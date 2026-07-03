@@ -110,6 +110,7 @@ export const DEFAULT: Settings = {
   instantPlay: true,
   rememberLastStream: false,
   keepSourceNextEpisode: false,
+  seasonSourceLock: false,
   playerHdrToSdr: true,
   playerDisplayPanel: "auto",
   playerMotionInterp: false,

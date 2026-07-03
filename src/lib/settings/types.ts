@@ -139,6 +139,7 @@ export type Settings = {
   instantPlay: boolean;
   rememberLastStream: boolean;
   keepSourceNextEpisode: boolean;
+  seasonSourceLock: boolean;
   playerHdrToSdr: boolean;
   playerDisplayPanel: "auto" | "oled" | "lcd";
   playerMotionInterp: boolean;

@@ -17,6 +17,26 @@ import { openInAppBrowser, openUrl } from "@/lib/window";
 import { enqueueDownload } from "@/lib/download/downloads-store";
 import { formatStreamQuality, humanError, isDebridFailure } from "./picker-utils";
 
+// A debrid often returns a stub placeholder while it finishes
+// caching a file. Rather than kicking to the picker, wait briefly and retry the
+// SAME source a few times, like Stremio does.
+const SAME_SOURCE_MAX_RETRIES = 4;
+const SAME_SOURCE_RETRY_DELAY_MS = 1500;
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
 export function usePickHandler({
   meta,
   imdbId,
@@ -44,6 +64,8 @@ export function usePickHandler({
   setFailedStreams,
   setResolveError,
   setResolving,
+  seasonLock,   
+  
 }: {
   meta: Meta;
   imdbId?: string | null;
@@ -71,6 +93,7 @@ export function usePickHandler({
   setFailedStreams: Dispatch<SetStateAction<Set<ScoredStream>>>;
   setResolveError: (msg: string | null) => void;
   setResolving: Dispatch<SetStateAction<{ stream: ScoredStream } | null>>;
+  seasonLock: boolean;
 }) {
   const [queuedHash, setQueuedHash] = useState<string | null>(null);
   const [debridDown, setDebridDown] = useState(false);
@@ -90,7 +113,7 @@ export function usePickHandler({
     }
   };
 
-  const resolveAndOpen = async (stream: ScoredStream, userCommitted: boolean, forceP2p = false) => {
+  const resolveAndOpen = async (stream: ScoredStream, userCommitted: boolean, forceP2p = false, attemptNo = 0) => {
     const ac = new AbortController();
     resolveAcRef.current?.abort();
     resolveAcRef.current = ac;
@@ -105,8 +128,24 @@ export function usePickHandler({
           setResolving(null);
           return;
         }
-        setFailedStreams((prev) => new Set(prev).add(stream));
         const isDebridSide = isDebridFailure(r.code, r.tried);
+        // Transient debrid-side failures often mean the file is still being
+        // cached. In manual / season-lock, retry the SAME source instead of
+        // kicking to the picker or jumping to a different source.
+        if (
+          isDebridSide &&
+          (!autoActive || seasonLock) &&
+          attemptNo < SAME_SOURCE_MAX_RETRIES
+        ) {
+          console.warn(
+            `[picker] debrid-side fail (${r.code}); retry same source ${attemptNo + 1}/${SAME_SOURCE_MAX_RETRIES}`,
+          );
+          await sleep(SAME_SOURCE_RETRY_DELAY_MS * (attemptNo + 1), ac.signal);
+          if (ac.signal.aborted) return;
+          await resolveAndOpen(stream, userCommitted, forceP2p, attemptNo + 1);
+          return;
+        }
+        setFailedStreams((prev) => new Set(prev).add(stream));
         if (isDebridSide && debrids.length > 0) {
           debridFailStreakRef.current += 1;
           if (debridFailStreakRef.current >= 2) {
@@ -142,8 +181,22 @@ export function usePickHandler({
           : await preflightCheck(playUrl, ac.signal);
       if (ac.signal.aborted) return;
       if (!preflight.ok && preflight.reason === "stub") {
+  const reasonStr = `preflight_stub_${preflight.sizeBytes ?? 0}b`;
+  // Manual picks and season-lock should wait for the debrid to finish
+  // caching and retry the SAME source, instead of kicking (manual) or
+  // jumping to a different source (which would break the season lock).
+  const canSameSourceRetry =
+          (!autoActive || seasonLock) && attemptNo < SAME_SOURCE_MAX_RETRIES;
+        if (canSameSourceRetry) {
+          console.warn(
+            `[picker] stub on same source; retry ${attemptNo + 1}/${SAME_SOURCE_MAX_RETRIES}`,
+          );
+          await sleep(SAME_SOURCE_RETRY_DELAY_MS * (attemptNo + 1), ac.signal);
+          if (ac.signal.aborted) return;
+          await resolveAndOpen(stream, userCommitted, forceP2p, attemptNo + 1);
+          return;
+        }
         setFailedStreams((prev) => new Set(prev).add(stream));
-        const reasonStr = `preflight_stub_${preflight.sizeBytes ?? 0}b`;
         markStreamDead({ url: r.data.url }, reasonStr, PREFLIGHT_STUB_TTL_MS);
         console.warn(
           `[picker] preflight detected stub (${preflight.sizeBytes ?? "unknown"} bytes); skipping`,
